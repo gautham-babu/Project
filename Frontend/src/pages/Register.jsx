@@ -12,6 +12,7 @@ const Register = () => {
   });
   const [validationErrors, setValidationErrors] = useState({});
   const [passwordStrength, setPasswordStrength] = useState(null);
+  const [serverError, setServerError] = useState(null);
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -24,12 +25,13 @@ const Register = () => {
       [name]: value,
     });
 
-    // Clear validation error for this field
-    if (validationErrors[name]) {
+    // Clear validation error for this field and server error on input change
+    if (validationErrors[name] || serverError) {
       setValidationErrors({
         ...validationErrors,
         [name]: null,
       });
+      setServerError(null);
     }
 
     // Update password strength
@@ -71,13 +73,16 @@ const Register = () => {
 
     const { username, password } = formData;
     const result = await dispatch(register({ username, password }));
-    
-    // Navigate to login on successful registration
+
     if (result.type === 'auth/register/fulfilled') {
       setTimeout(() => {
         navigate('/login');
       }, 2000);
+      return;
     }
+
+    const errorMessage = result.payload || result.error?.message || 'Registration failed';
+    setServerError(errorMessage);
   };
 
   return (
@@ -189,6 +194,11 @@ const Register = () => {
               )}
             </div>
 
+            {serverError && (
+              <p className="mt-2 text-sm text-red-600 text-center">
+                {serverError}
+              </p>
+            )}
             <button
               type="submit"
               className="w-full btn-primary"

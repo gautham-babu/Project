@@ -49,7 +49,7 @@ export const getUserFriendlyErrorMessage = (error) => {
       case 404:
         return 'The requested resource was not found.';
       case 409:
-        return error.response.data?.error || 'Conflict with existing data.';
+        return error.response.data?.error || 'Username not available.';
       case 429:
         return 'Too many requests. Please wait a moment and try again.';
       case 500:
@@ -101,7 +101,7 @@ export const getErrorSeverity = (error) => {
       return ERROR_SEVERITY.MEDIUM;
     }
     if (error.response.status === 400 || error.response.status === 409) {
-      return ERROR_SEVERITY.LOW;
+      return ERROR_SEVERITY.MEDIUM;
     }
   }
 

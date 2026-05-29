@@ -169,7 +169,7 @@ def register():
         cur.execute("SELECT * FROM users WHERE username=?", (username,))
         existing_user = cur.fetchone()
         if existing_user:
-            return {"error" : "Username already exists!"}, 409
+            return {"error" : "Username not available"}, 409
             
         con.execute("INSERT INTO users(username, password) VALUES(?, ?)", (username, hashed_password))
 
