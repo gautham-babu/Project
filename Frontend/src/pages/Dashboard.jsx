@@ -1,15 +1,40 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { getUserInfo } from '../redux/slices/authSlice';
+import apiClient from '../redux/api/apiClient';
 
 const Dashboard = () => {
   const { user, loading } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
+  const [userStats, setUserStats] = useState({ storage_used_mb: 0, file_count: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+  const MAX_STORAGE_GB = 1;
+  const MAX_STORAGE_MB = MAX_STORAGE_GB * 1024;
+  const storagePercentage = Math.min((userStats.storage_used_mb / MAX_STORAGE_MB) * 100, 100);
 
   useEffect(() => {
     dispatch(getUserInfo());
   }, [dispatch]);
+
+  useEffect(() => {
+    const fetchUserStats = async () => {
+      try {
+        setStatsLoading(true);
+        const response = await apiClient.get('/user/stats');
+        setUserStats(response.data);
+      } catch (error) {
+        console.error('Failed to fetch user stats:', error);
+        setUserStats({ storage_used_mb: 0, file_count: 0 });
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchUserStats();
+    }
+  }, [user]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -62,12 +87,24 @@ const Dashboard = () => {
               </svg>
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900">System Info</h3>
-              <p className="mt-1 text-sm text-gray-600">
-                File upload limit: 100MB
+              <h3 className="text-lg font-semibold text-gray-900">Your Storage</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                {statsLoading ? 'Loading...' : `${userStats.storage_used_mb} MB / ${MAX_STORAGE_MB} MB`}
               </p>
-              <p className="mt-1 text-sm text-gray-600">
-                Allowed types: PDF, PNG, JPG, TXT, DOCX, MP4, MOV, MKV
+              <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    storagePercentage > 90
+                      ? 'bg-red-500'
+                      : storagePercentage > 70
+                      ? 'bg-yellow-500'
+                      : 'bg-green-500'
+                  }`}
+                  style={{ width: `${storagePercentage}%` }}
+                ></div>
+              </div>
+              <p className="mt-2 text-xs text-gray-600">
+                {statsLoading ? 'Loading...' : `Files uploaded: ${userStats.file_count}`}
               </p>
             </div>
           </div>

@@ -27,6 +27,7 @@ CORS(app, resources={
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['UPLOADED_FILES_DEST'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 100*1024*1024 #100MB limit for uploads
+app.config['MAX_STORAGE_PER_USER'] = 1*1024*1024*1024  # 1 GB limit per user
 #Prevents brute-force attacks
 limiter = Limiter(
     get_remote_address,
@@ -249,6 +250,27 @@ def upload_file(authenticated_user):
         
     file_to_upload = request.files["file"]
     
+    # Calculate user's current storage
+    try:
+        upload_dir = app.config['UPLOADED_FILES_DEST']
+        all_files = os.listdir(upload_dir)
+        
+        current_storage = 0
+        for filename in all_files:
+            if filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_"):
+                file_path = os.path.join(upload_dir, filename)
+                current_storage += os.path.getsize(file_path)
+    except Exception:
+        return {"error" : "Failed to check storage"}, 500
+    
+    # Check if adding this file would exceed the limit
+    file_size = len(file_to_upload.read())
+    file_to_upload.seek(0)  # Reset file pointer
+    
+    if current_storage + file_size > app.config['MAX_STORAGE_PER_USER']:
+        max_storage_gb = app.config['MAX_STORAGE_PER_USER'] / (1024 * 1024 * 1024)
+        return {"error" : f"Storage limit exceeded. Maximum {max_storage_gb}GB per user."}, 413
+    
     #.save() saves file with prefix '_' to ensure user isolation
     try:
         saved_filename = user_files.save(file_to_upload, name=f"{authenticated_user}_.")
@@ -308,6 +330,39 @@ def list_user_files(authenticated_user):
         return {"files": user_files_list}, 200
     except Exception as e:
         return {"error": "Failed to retrieve files"}, 500
+
+@app.errorhandler(413)
+def file_too_large(e):
+    return {"error" : "File exceeds the 100MB limit. Please upload a smaller file."}, 413
+
+#Get user storage statistics
+@app.route('/user/stats', methods=['GET'])
+@require_auth_token
+def get_user_stats(authenticated_user):
+    try:
+        upload_dir = app.config['UPLOADED_FILES_DEST']
+        all_files = os.listdir(upload_dir)
+        
+        total_storage = 0
+        file_count = 0
+        
+        # Calculate storage and count for user's files
+        for filename in all_files:
+            if filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_"):
+                file_path = os.path.join(upload_dir, filename)
+                file_stat = os.stat(file_path)
+                total_storage += file_stat.st_size
+                file_count += 1
+        
+        # Convert bytes to MB
+        storage_mb = round(total_storage / (1024 * 1024), 2)
+        
+        return {
+            "storage_used_mb": storage_mb,
+            "file_count": file_count
+        }, 200
+    except Exception as e:
+        return {"error": "Failed to retrieve user stats"}, 500
 
 @app.errorhandler(413)
 def file_too_large(e):

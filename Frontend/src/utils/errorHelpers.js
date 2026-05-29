@@ -50,6 +50,8 @@ export const getUserFriendlyErrorMessage = (error) => {
         return 'The requested resource was not found.';
       case 409:
         return error.response.data?.error || 'Username not available.';
+      case 413:
+        return error.response.data?.error || 'File too large or storage limit exceeded.';
       case 429:
         return 'Too many requests. Please wait a moment and try again.';
       case 500:
