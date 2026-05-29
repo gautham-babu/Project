@@ -10,10 +10,13 @@ const Profile = () => {
   const navigate = useNavigate();
 
   const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
   const [validationErrors, setValidationErrors] = useState({});
+  const [serverError, setServerError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [passwordStrength, setPasswordStrength] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -24,11 +27,13 @@ const Profile = () => {
       [name]: value,
     });
 
-    if (validationErrors[name]) {
+    if (validationErrors[name] || serverError || successMessage) {
       setValidationErrors({
         ...validationErrors,
         [name]: null,
       });
+      setServerError(null);
+      setSuccessMessage(null);
     }
 
     if (name === 'newPassword') {
@@ -38,6 +43,10 @@ const Profile = () => {
 
   const validatePasswordForm = () => {
     const errors = {};
+
+    if (!passwordData.currentPassword) {
+      errors.currentPassword = 'Current password is required';
+    }
 
     const passwordErrors = validatePassword(passwordData.newPassword);
     if (passwordErrors.length > 0) {
@@ -59,11 +68,19 @@ const Profile = () => {
       return;
     }
 
-    const result = await dispatch(updatePassword(passwordData.newPassword));
+    const result = await dispatch(updatePassword({
+      currentPassword: passwordData.currentPassword,
+      newPassword: passwordData.newPassword,
+    }));
     if (result.type === 'auth/updatePassword/fulfilled') {
-      setPasswordData({ newPassword: '', confirmPassword: '' });
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setPasswordStrength(null);
+      setSuccessMessage('Password changed successfully');
+      setServerError(null);
+      return;
     }
+
+    setServerError(result.payload || result.error?.message || 'Password update failed');
   };
 
   const handleDeleteAccount = async () => {
@@ -103,6 +120,23 @@ const Profile = () => {
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Change Password</h2>
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                Current Password
+              </label>
+              <input
+                id="currentPassword"
+                name="currentPassword"
+                type="password"
+                className={`input-field ${validationErrors.currentPassword ? 'border-red-500' : ''}`}
+                placeholder="Enter current password"
+                value={passwordData.currentPassword}
+                onChange={handlePasswordChange}
+              />
+              {validationErrors.currentPassword && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.currentPassword}</p>
+              )}
+            </div>
             <div>
               <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
                 New Password
@@ -164,6 +198,12 @@ const Profile = () => {
               />
               {validationErrors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-600">{validationErrors.confirmPassword}</p>
+              )}
+              {serverError && (
+                <p className="mt-1 text-sm text-red-600">{serverError}</p>
+              )}
+              {successMessage && (
+                <p className="mt-1 text-sm text-green-600">{successMessage}</p>
               )}
             </div>
 

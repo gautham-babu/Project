@@ -97,15 +97,33 @@ def manage_user(authenticated_user):
         return {"message" : f"Welcome back, {authenticated_user}"}
     if request.method == 'PUT':
         data = request.get_json()
+        current_password = data.get('currentPassword')
         new_password = data.get('password')
+
+        if not current_password or not new_password:
+            return {"error" : "Current password and new password are required."}, 400
+
         password_error = validate_password(new_password)
         if password_error:
             return {"error" : password_error}, 400
-        
-        #Store passwords securely using hashing
-        new_hashed = generate_password_hash(new_password)
+
+        if current_password == new_password:
+            return {"error" : "New password must be different from the current password."}, 400
+
         with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute("SELECT password FROM users WHERE username = ?", (authenticated_user,))
+            row = cur.fetchone()
+            if not row:
+                return {"error" : "User not found."}, 404
+
+            current_hashed = row[0]
+            if not check_password_hash(current_hashed, current_password):
+                return {"error" : "Current password is incorrect."}, 400
+
+            new_hashed = generate_password_hash(new_password)
             con.execute("UPDATE users SET password = ? WHERE username = ?", (new_hashed, authenticated_user))
+
         return {"message" : "Password updated successfully."}
 
     if request.method == 'DELETE':

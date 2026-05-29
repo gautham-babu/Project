@@ -43,7 +43,7 @@ export const getUserFriendlyErrorMessage = (error) => {
       case 400:
         return error.response.data?.error || 'Invalid request. Please check your input.';
       case 401:
-        return 'Authentication required. Please log in again.';
+        return error.response.data?.error || 'Authentication required. Please log in again.';
       case 403:
         return 'You do not have permission to perform this action.';
       case 404:

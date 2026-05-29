@@ -57,9 +57,12 @@ export const getUserInfo = createAsyncThunk(
 
 export const updatePassword = createAsyncThunk(
   'auth/updatePassword',
-  async (newPassword, { dispatch, rejectWithValue }) => {
+  async ({ currentPassword, newPassword }, { dispatch, rejectWithValue }) => {
     try {
-      const response = await apiClient.put('/user', { password: newPassword });
+      const response = await apiClient.put('/user', {
+        currentPassword,
+        password: newPassword,
+      });
       
       // Dispatch success notification
       dispatchSuccess(dispatch, 'Password updated successfully!');
