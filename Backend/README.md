@@ -16,7 +16,7 @@ This project is a Flask-based REST API designed for secure user authentication a
 ## Project Structure
 
 ```text
-Task-1/
+Backend/
 ├── app.py              # Main Flask application
 ├── database.db         # SQLite database (Auto-created on first run)
 ├── uploads/            # Secure storage for user-uploaded files
@@ -33,7 +33,7 @@ Task-1/
 Open your terminal and enter the subfolder:
 
 ```bash
-cd Task-1
+cd Backend
 
 ```
 
@@ -72,14 +72,14 @@ pip install -r requirements.txt
 ### 5. Configure Environment Variables
 
 ```text
-# Create a .env file inside the Task-1 folder
+# Create a .env file inside the Backend folder
 SECRET_KEY=your_random_key
 
 ```
 
 ### 6. Create Upload Directory
 
-Ensure an `uploads` folder exists within the `Task-1` directory to store files.
+Ensure an `uploads` folder exists within the `Backend` directory to store files.
 
 ### 7. Run the Server
 

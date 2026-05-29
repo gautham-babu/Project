@@ -67,10 +67,9 @@ A modern, responsive React.js frontend application for file sharing and user man
 
 ### Installation Steps
 
-1. **Clone the repository**
+1. **Navigate to the Task Folder**
    ```bash
-   git clone <repository-url>
-   cd task2
+   cd Frontend
    ```
 
 2. **Install dependencies**
