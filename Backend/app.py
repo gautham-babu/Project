@@ -293,6 +293,24 @@ def download_file(authenticated_user, filename):
     #Send the file from the destination folder
     return send_from_directory(app.config['UPLOADED_FILES_DEST'], filename, as_attachment=True)
 
+#Delete a file - only by the owner
+@app.route('/delete/<filename>', methods=['DELETE'])
+@require_auth_token
+def delete_file(authenticated_user, filename):
+    #Ensure they only delete their own files
+    if not (filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_")):
+        return {"error" : "Unauthorized. You can only delete your own files."}, 403
+    
+    try:
+        file_path = os.path.join(app.config['UPLOADED_FILES_DEST'], filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return {"message" : "File deleted successfully."}, 200
+        else:
+            return {"error" : "File not found."}, 404
+    except Exception as e:
+        return {"error" : "Failed to delete file."}, 500
+
 #List user's uploaded files
 @app.route('/files', methods=['GET'])
 @require_auth_token

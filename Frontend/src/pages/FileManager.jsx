@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { uploadFile, downloadFile, fetchUserFiles } from '../redux/slices/fileSlice';
+import { uploadFile, downloadFile, deleteFile, fetchUserFiles } from '../redux/slices/fileSlice';
 import { validateFile } from '../utils/validators';
 
 const FileManager = () => {
@@ -11,6 +11,9 @@ const FileManager = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -77,6 +80,38 @@ const FileManager = () => {
 
   const handleDownload = (filename) => {
     dispatch(downloadFile(filename));
+  };
+
+  const handleDelete = async (filename) => {
+    const result = await dispatch(deleteFile(filename));
+    if (result.type === 'files/deleteFile/fulfilled') {
+      // Refresh file list after deletion
+      setCurrentPage(1);
+      dispatch(fetchUserFiles());
+    }
+  };
+
+  // Filter files by search query
+  const filteredFiles = uploadedFiles.filter((file) =>
+    file.filename.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredFiles.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedFiles = filteredFiles.slice(startIndex, startIndex + itemsPerPage);
+
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1); // Reset to first page on search
+  };
+
+  const handlePreviousPage = () => {
+    setCurrentPage((prev) => Math.max(prev - 1, 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
   };
 
   const formatFileSize = (bytes) => {
@@ -206,9 +241,34 @@ const FileManager = () => {
 
       {/* Files List */}
       <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Your Files</h2>
+        <div className="mb-4 flex items-center space-x-3">
+          <h2 className="text-xl font-semibold text-gray-900 flex-1">Your Files</h2>
+          <div className="flex-1 max-w-md relative">
+            <input
+              type="text"
+              placeholder="Search files..."
+              value={searchQuery}
+              onChange={handleSearchChange}
+              className="input-field w-full pr-10"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setCurrentPage(1);
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                title="Clear search"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
         
-        {uploadedFiles.length === 0 ? (
+        {filteredFiles.length === 0 && uploadedFiles.length === 0 ? (
           <div className="text-center py-12">
             <svg
               className="mx-auto h-12 w-12 text-gray-400"
@@ -226,50 +286,106 @@ const FileManager = () => {
             <p className="mt-2 text-gray-500">No files uploaded yet</p>
             <p className="text-sm text-gray-400">Upload your first file to get started</p>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {uploadedFiles.map((file, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center space-x-3 flex-1">
-                  <svg
-                    className={`w-8 h-8 ${getFileIcon(file.filename)}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">
-                      {file.filename}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {file.uploaded_at ? new Date(file.uploaded_at * 1000).toLocaleString() : 'Recently uploaded'}
-                      {file.size && ` • ${formatFileSize(file.size)}`}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDownload(file.filename)}
-                  className="btn-primary text-sm ml-4"
-                  disabled={loading}
-                >
-                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download
-                </button>
-              </div>
-            ))}
+        ) : filteredFiles.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No files match your search</p>
           </div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {paginatedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center space-x-3 flex-1">
+                    <svg
+                      className={`w-8 h-8 ${getFileIcon(file.filename)}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">
+                        {file.filename}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {file.uploaded_at ? new Date(file.uploaded_at * 1000).toLocaleString() : 'Recently uploaded'}
+                        {file.size && ` • ${formatFileSize(file.size)}`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDownload(file.filename)}
+                    className="btn-primary text-sm ml-4"
+                    disabled={loading}
+                  >
+                    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download
+                  </button>
+                  <button
+                    onClick={() => handleDelete(file.filename)}
+                    className="btn-danger text-sm ml-2"
+                    disabled={loading}
+                  >
+                    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3H4v2h16V7h-3.5z" />
+                    </svg>
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredFiles.length)} of {filteredFiles.length} files
+                </p>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <div className="flex items-center space-x-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                          currentPage === page
+                            ? 'bg-primary-600 text-white'
+                            : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

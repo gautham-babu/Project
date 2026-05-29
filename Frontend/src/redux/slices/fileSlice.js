@@ -72,6 +72,23 @@ export const downloadFile = createAsyncThunk(
   }
 );
 
+export const deleteFile = createAsyncThunk(
+  'files/deleteFile',
+  async (filename, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete(`/delete/${filename}`);
+      
+      // Dispatch success notification
+      dispatchSuccess(dispatch, `File "${filename}" deleted successfully!`);
+      
+      return { filename, message: 'File deleted' };
+    } catch (error) {
+      dispatchError(dispatch, error, 'File Delete');
+      return rejectWithValue(error.response?.data?.error || 'File delete failed');
+    }
+  }
+);
+
 const fileSlice = createSlice({
   name: 'files',
   initialState: {
@@ -120,6 +137,16 @@ const fileSlice = createSlice({
         state.loading = false;
       })
       .addCase(downloadFile.rejected, (state) => {
+        state.loading = false;
+      })
+      // Delete File
+      .addCase(deleteFile.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteFile.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(deleteFile.rejected, (state) => {
         state.loading = false;
       });
   },
