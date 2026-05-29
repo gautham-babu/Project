@@ -9,6 +9,7 @@ import {
   validatePassword,
   getPasswordStrength,
 } from '../utils/validators';
+import Datepicker from "react-tailwindcss-datepicker";
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -263,15 +264,41 @@ const Register = () => {
               <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-1">
                 Date of Birth
               </label>
-              <input
-                id="dateOfBirth"
-                name="dateOfBirth"
-                type="date"
-                required
-                className={`input-field ${validationErrors.dateOfBirth ? 'border-red-500' : ''}`}
-                value={formData.dateOfBirth}
-                onChange={handleChange}
-              />
+              <div className={`relative ${validationErrors.dateOfBirth ? 'border border-red-500 rounded-md' : ''}`}>
+                <Datepicker
+                  useRange={false} 
+                  asSingle={true} 
+                  value={{ startDate: formData.dateOfBirth, endDate: formData.dateOfBirth }}
+                  onChange={(newValue) => {
+                    let finalDate = "";
+                    
+                    if (newValue && newValue.startDate) {
+                      // Take whatever format the calendar gives us and turn it into a real Date object
+                      const selectedDate = new Date(newValue.startDate);
+                      
+                      // Pull out the year, month, and day separately
+                      const year = selectedDate.getFullYear();
+                      // Add a leading zero if the month or day is a single digit (e.g., '05')
+                      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                      const day = String(selectedDate.getDate()).padStart(2, '0');
+                      
+                      // Stitch them together exactly how your backend wants it
+                      finalDate = `${year}-${month}-${day}`;
+                    }
+
+                    setFormData({ ...formData, dateOfBirth: finalDate });
+                    
+                    // Clear errors
+                    if (validationErrors.dateOfBirth || serverError) {
+                      setValidationErrors({ ...validationErrors, dateOfBirth: null });
+                      setServerError(null);
+                    }
+                  }}
+                  displayFormat={"DD/MM/YYYY"}
+                  placeholder="dd/mm/yyyy"
+                  inputClassName="input-field w-full" 
+                />
+              </div>
               {validationErrors.dateOfBirth && (
                 <p className="mt-1 text-sm text-red-600">{validationErrors.dateOfBirth}</p>
               )}
