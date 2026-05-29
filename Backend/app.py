@@ -241,14 +241,20 @@ def refresh_token(authenticated_user):
     
     return {"message" : "Token refreshed successfully", "token" : new_token}
 
-#Uploads a file and links it to the authenticated user's ID
+#Uploads files and links them to the authenticated user's ID
 @app.route('/upload', methods=['POST'])
 @require_auth_token
 def upload_file(authenticated_user):
-    if "file" not in request.files or request.files["file"].filename == '':
-        return {"error" : "No valid file provided"}, 400
-        
-    file_to_upload = request.files["file"]
+    # Handle both single file ("file") and multiple files ("files")
+    files_to_upload = []
+    
+    if "files" in request.files:
+        files_to_upload = request.files.getlist("files")
+    elif "file" in request.files:
+        files_to_upload = [request.files["file"]]
+    
+    if not files_to_upload or (len(files_to_upload) == 1 and files_to_upload[0].filename == ''):
+        return {"error" : "No valid files provided"}, 400
     
     # Calculate user's current storage
     try:
@@ -263,24 +269,45 @@ def upload_file(authenticated_user):
     except Exception:
         return {"error" : "Failed to check storage"}, 500
     
-    # Check if adding this file would exceed the limit
-    file_size = len(file_to_upload.read())
-    file_to_upload.seek(0)  # Reset file pointer
+    # Calculate total size of files to upload
+    total_upload_size = 0
+    for file in files_to_upload:
+        file.seek(0, 2)  # Seek to end
+        total_upload_size += file.tell()
+        file.seek(0)  # Reset to beginning
     
-    if current_storage + file_size > app.config['MAX_STORAGE_PER_USER']:
+    # Check if adding these files would exceed the limit
+    if current_storage + total_upload_size > app.config['MAX_STORAGE_PER_USER']:
         max_storage_gb = app.config['MAX_STORAGE_PER_USER'] / (1024 * 1024 * 1024)
         return {"error" : f"Storage limit exceeded. Maximum {max_storage_gb}GB per user."}, 413
     
-    #.save() saves file with prefix '_' to ensure user isolation
-    try:
-        saved_filename = user_files.save(file_to_upload, name=f"{authenticated_user}_.")
-        
-        return {
-            "message" : "Upload successful!",
-            "download_link": f"{request.host_url}download/{saved_filename}"
-        }, 201
-    except Exception:
+    # Save files
+    uploaded_files = []
+    errors = []
+    
+    for file in files_to_upload:
+        try:
+            saved_filename = user_files.save(file, name=f"{authenticated_user}_.")
+            uploaded_files.append({
+                "filename": saved_filename,
+                "download_link": f"{request.host_url}download/{saved_filename}"
+            })
+        except Exception as e:
+            errors.append(f"{file.filename}: Invalid file format")
+    
+    if not uploaded_files:
         return {"error" : "Invalid file format. Please upload pdf, png, jpg, jpeg, txt, docx, mp4, mov, or mkv."}, 400
+    
+    response = {
+        "message" : f"Uploaded {len(uploaded_files)} file{'s' if len(uploaded_files) != 1 else ''}",
+        "uploaded_files": uploaded_files
+    }
+    
+    if errors:
+        response["warnings"] = errors
+    
+    return response, 201
+
 
 #Gives files only to the owners who uploaded them
 @app.route('/download/<filename>', methods=['GET'])

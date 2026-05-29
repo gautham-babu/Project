@@ -5,10 +5,15 @@ import { dispatchError, dispatchSuccess } from '../../utils/errorHelpers';
 // Async thunks for file operations
 export const uploadFile = createAsyncThunk(
   'files/uploadFile',
-  async (file, { dispatch, rejectWithValue }) => {
+  async (files, { dispatch, rejectWithValue }) => {
     try {
+      const fileArray = Array.isArray(files) ? files : [files];
       const formData = new FormData();
-      formData.append('file', file);
+      
+      // Append all files to FormData
+      fileArray.forEach((file) => {
+        formData.append('files', file);
+      });
 
       const response = await apiClient.post('/upload', formData, {
         headers: {
@@ -17,7 +22,11 @@ export const uploadFile = createAsyncThunk(
       });
       
       // Dispatch success notification
-      dispatchSuccess(dispatch, `File "${file.name}" uploaded successfully!`);
+      const count = fileArray.length;
+      dispatchSuccess(
+        dispatch,
+        `${count} file${count !== 1 ? 's' : ''} uploaded successfully!`
+      );
       
       return response.data;
     } catch (error) {

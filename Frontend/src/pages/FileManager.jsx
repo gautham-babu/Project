@@ -8,7 +8,7 @@ const FileManager = () => {
   const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,17 +22,30 @@ const FileManager = () => {
   }, [dispatch]);
 
   const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const errors = validateFile(file);
-      if (errors.length > 0) {
-        setValidationError(errors[0]);
-        setSelectedFile(null);
+    const files = Array.from(e.target.files || []);
+    processFiles(files);
+  };
+
+  const processFiles = (files) => {
+    const newFiles = [];
+    const errors = [];
+
+    files.forEach((file) => {
+      const fileErrors = validateFile(file);
+      if (fileErrors.length > 0) {
+        errors.push(`${file.name}: ${fileErrors[0]}`);
       } else {
-        setValidationError(null);
-        setSelectedFile(file);
+        newFiles.push(file);
       }
+    });
+
+    if (errors.length > 0) {
+      setValidationError(errors.join('; '));
+    } else {
+      setValidationError(null);
     }
+
+    setSelectedFiles((prev) => [...prev, ...newFiles]);
   };
 
   const handleDrag = (e) => {
@@ -50,32 +63,29 @@ const FileManager = () => {
     e.stopPropagation();
     setDragActive(false);
     
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      const errors = validateFile(file);
-      if (errors.length > 0) {
-        setValidationError(errors[0]);
-        setSelectedFile(null);
-      } else {
-        setValidationError(null);
-        setSelectedFile(file);
-      }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      processFiles(files);
     }
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (selectedFiles.length === 0) return;
 
-    const result = await dispatch(uploadFile(selectedFile));
+    const result = await dispatch(uploadFile(selectedFiles));
     
     if (result.type === 'files/uploadFile/fulfilled') {
-      setSelectedFile(null);
+      setSelectedFiles([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
       // Refresh file list after upload
       dispatch(fetchUserFiles());
     }
+  };
+
+  const removeFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleDownload = (filename) => {
@@ -189,6 +199,7 @@ const FileManager = () => {
                 id="file-upload"
                 ref={fileInputRef}
                 type="file"
+                multiple
                 className="sr-only"
                 onChange={handleFileSelect}
                 accept=".pdf,.png,.jpg,.jpeg,.txt,.docx,.mp4,.mov,.mkv"
@@ -201,39 +212,56 @@ const FileManager = () => {
           </p>
         </div>
 
-        {selectedFile && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <svg className="w-8 h-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <div>
-                  <p className="font-medium text-gray-900">{selectedFile.name}</p>
-                  <p className="text-sm text-gray-500">{formatFileSize(selectedFile.size)}</p>
+        {selectedFiles.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <h3 className="text-sm font-medium text-gray-900">Selected files ({selectedFiles.length}):</h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {selectedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex items-center space-x-2 flex-1 min-w-0">
+                    <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                      <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeFile(index)}
+                    className="ml-2 text-red-600 hover:text-red-700"
+                    title="Remove file"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={handleUpload}
-                  className="btn-primary"
-                  disabled={loading}
-                >
-                  {loading ? 'Uploading...' : 'Upload'}
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setValidationError(null);
-                    if (fileInputRef.current) {
-                      fileInputRef.current.value = '';
-                    }
-                  }}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-              </div>
+              ))}
+            </div>
+            <div className="flex space-x-2 pt-2">
+              <button
+                onClick={handleUpload}
+                className="btn-primary"
+                disabled={loading}
+              >
+                {loading ? 'Uploading...' : `Upload ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}`}
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedFiles([]);
+                  setValidationError(null);
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                  }
+                }}
+                className="btn-secondary"
+              >
+                Clear All
+              </button>
             </div>
           </div>
         )}
