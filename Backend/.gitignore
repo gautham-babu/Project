@@ -1,0 +1,5 @@
+.env
+*.db
+database.db
+uploads/*
+venv/

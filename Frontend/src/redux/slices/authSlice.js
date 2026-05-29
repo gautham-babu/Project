@@ -1,0 +1,174 @@
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import apiClient from '../api/apiClient';
+import { dispatchError, dispatchSuccess } from '../../utils/errorHelpers';
+
+// Async thunks for authentication
+export const register = createAsyncThunk(
+  'auth/register',
+  async (credentials, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.post('/register', credentials);
+      
+      // Dispatch success notification
+      dispatchSuccess(dispatch, 'Account created successfully! Please log in.');
+      
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Registration');
+      return rejectWithValue(error.response?.data?.error || 'Registration failed');
+    }
+  }
+);
+
+export const login = createAsyncThunk(
+  'auth/login',
+  async (credentials, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.post('/login', credentials);
+      const { token, message } = response.data;
+      
+      // Store token and username in localStorage
+      localStorage.setItem('token', token);
+      localStorage.setItem('username', credentials.username.toLowerCase().trim());
+      
+      // Dispatch success notification
+      dispatchSuccess(dispatch, `Welcome back, ${credentials.username}!`);
+      
+      return { token, username: credentials.username.toLowerCase().trim(), message };
+    } catch (error) {
+      dispatchError(dispatch, error, 'Login');
+      return rejectWithValue(error.response?.data?.error || 'Login failed');
+    }
+  }
+);
+
+export const getUserInfo = createAsyncThunk(
+  'auth/getUserInfo',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.get('/user');
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Get User Info');
+      return rejectWithValue(error.response?.data?.error || 'Failed to get user info');
+    }
+  }
+);
+
+export const updatePassword = createAsyncThunk(
+  'auth/updatePassword',
+  async (newPassword, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.put('/user', { password: newPassword });
+      
+      // Dispatch success notification
+      dispatchSuccess(dispatch, 'Password updated successfully!');
+      
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Password Update');
+      return rejectWithValue(error.response?.data?.error || 'Password update failed');
+    }
+  }
+);
+
+export const deleteAccount = createAsyncThunk(
+  'auth/deleteAccount',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete('/user');
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      
+      // Dispatch success notification
+      dispatchSuccess(dispatch, 'Account deleted successfully.');
+      
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Account Deletion');
+      return rejectWithValue(error.response?.data?.error || 'Account deletion failed');
+    }
+  }
+);
+
+const authSlice = createSlice({
+  name: 'auth',
+  initialState: {
+    user: localStorage.getItem('username') || null,
+    token: localStorage.getItem('token') || null,
+    isAuthenticated: !!localStorage.getItem('token'),
+    loading: false,
+  },
+  reducers: {
+    logout: (state) => {
+      state.user = null;
+      state.token = null;
+      state.isAuthenticated = false;
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      // Register
+      .addCase(register.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(register.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(register.rejected, (state) => {
+        state.loading = false;
+      })
+      // Login
+      .addCase(login.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(login.fulfilled, (state, action) => {
+        state.loading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.username;
+        state.token = action.payload.token;
+      })
+      .addCase(login.rejected, (state) => {
+        state.loading = false;
+        state.isAuthenticated = false;
+      })
+      // Get User Info
+      .addCase(getUserInfo.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(getUserInfo.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(getUserInfo.rejected, (state) => {
+        state.loading = false;
+      })
+      // Update Password
+      .addCase(updatePassword.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(updatePassword.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(updatePassword.rejected, (state) => {
+        state.loading = false;
+      })
+      // Delete Account
+      .addCase(deleteAccount.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteAccount.fulfilled, (state) => {
+        state.loading = false;
+        state.user = null;
+        state.token = null;
+        state.isAuthenticated = false;
+      })
+      .addCase(deleteAccount.rejected, (state) => {
+        state.loading = false;
+      });
+  },
+});
+
+export const { logout } = authSlice.actions;
+export default authSlice.reducer;
