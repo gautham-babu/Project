@@ -25,16 +25,21 @@ export const login = createAsyncThunk(
   async (credentials, { dispatch, rejectWithValue }) => {
     try {
       const response = await apiClient.post('/login', credentials);
-      const { token, message } = response.data;
+      const { token, message, user } = response.data;
       
-      // Store token and username in localStorage
       localStorage.setItem('token', token);
-      localStorage.setItem('username', credentials.username.toLowerCase().trim());
+      localStorage.setItem('email', user.email);
+      localStorage.setItem('displayName', `${user.firstName} ${user.lastName}`);
       
-      // Dispatch success notification
-      dispatchSuccess(dispatch, `Welcome back, ${credentials.username}!`);
+      dispatchSuccess(dispatch, `Welcome back, ${user.firstName}!`);
       
-      return { token, username: credentials.username.toLowerCase().trim(), message };
+      return {
+        token,
+        user: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        profile: user,
+        message,
+      };
     } catch (error) {
       dispatchError(dispatch, error, 'Login');
       return rejectWithValue(error.response?.data?.error || 'Login failed');
@@ -81,7 +86,8 @@ export const deleteAccount = createAsyncThunk(
     try {
       const response = await apiClient.delete('/user');
       localStorage.removeItem('token');
-      localStorage.removeItem('username');
+      localStorage.removeItem('email');
+      localStorage.removeItem('displayName');
       
       // Dispatch success notification
       dispatchSuccess(dispatch, 'Account deleted successfully.');
@@ -97,7 +103,9 @@ export const deleteAccount = createAsyncThunk(
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
-    user: localStorage.getItem('username') || null,
+    user: localStorage.getItem('displayName') || localStorage.getItem('email') || null,
+    email: localStorage.getItem('email') || null,
+    profile: null,
     token: localStorage.getItem('token') || null,
     isAuthenticated: !!localStorage.getItem('token'),
     loading: false,
@@ -105,10 +113,13 @@ const authSlice = createSlice({
   reducers: {
     logout: (state) => {
       state.user = null;
+      state.email = null;
+      state.profile = null;
       state.token = null;
       state.isAuthenticated = false;
       localStorage.removeItem('token');
-      localStorage.removeItem('username');
+      localStorage.removeItem('email');
+      localStorage.removeItem('displayName');
     },
   },
   extraReducers: (builder) => {
@@ -130,7 +141,9 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        state.user = action.payload.username;
+        state.user = action.payload.user;
+        state.email = action.payload.email;
+        state.profile = action.payload.profile;
         state.token = action.payload.token;
       })
       .addCase(login.rejected, (state) => {
@@ -141,8 +154,16 @@ const authSlice = createSlice({
       .addCase(getUserInfo.pending, (state) => {
         state.loading = true;
       })
-      .addCase(getUserInfo.fulfilled, (state) => {
+      .addCase(getUserInfo.fulfilled, (state, action) => {
         state.loading = false;
+        if (action.payload.user) {
+          const { firstName, lastName, email } = action.payload.user;
+          state.user = `${firstName} ${lastName}`;
+          state.email = email;
+          state.profile = action.payload.user;
+          localStorage.setItem('displayName', `${firstName} ${lastName}`);
+          localStorage.setItem('email', email);
+        }
       })
       .addCase(getUserInfo.rejected, (state) => {
         state.loading = false;
@@ -164,6 +185,8 @@ const authSlice = createSlice({
       .addCase(deleteAccount.fulfilled, (state) => {
         state.loading = false;
         state.user = null;
+        state.email = null;
+        state.profile = null;
         state.token = null;
         state.isAuthenticated = false;
       })

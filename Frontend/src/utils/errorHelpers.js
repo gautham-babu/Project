@@ -9,7 +9,7 @@ const ERROR_MESSAGES = {
   'ERR_TIMEOUT': 'Request timed out. Please try again.',
 
   // Authentication errors
-  'INVALID_CREDENTIALS': 'Invalid username or password. Please check your credentials.',
+  'INVALID_CREDENTIALS': 'Invalid email address or password. Please check your credentials.',
   'TOKEN_EXPIRED': 'Your session has expired. Please log in again.',
   'UNAUTHORIZED': 'You are not authorized to perform this action.',
 
@@ -49,7 +49,7 @@ export const getUserFriendlyErrorMessage = (error) => {
       case 404:
         return 'The requested resource was not found.';
       case 409:
-        return error.response.data?.error || 'Username not available.';
+        return error.response.data?.error || 'Email address is already registered.';
       case 413:
         return error.response.data?.error || 'File too large or storage limit exceeded.';
       case 429:
@@ -145,14 +145,10 @@ export const dispatchSuccess = (dispatch, message, type = 'general', duration = 
 // Retry helper for failed operations
 export const createRetryHandler = (dispatch, operation, maxRetries = 3) => {
   return async (...args) => {
-    let lastError;
-    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await operation(...args);
       } catch (error) {
-        lastError = error;
-        
         if (attempt === maxRetries) {
           dispatchError(dispatch, error, operation.name || 'Retry Operation');
           throw error;

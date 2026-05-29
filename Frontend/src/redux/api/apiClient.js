@@ -57,7 +57,8 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         // Token refresh failed, clear auth data
         localStorage.removeItem('token');
-        localStorage.removeItem('username');
+        localStorage.removeItem('email');
+        localStorage.removeItem('displayName');
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

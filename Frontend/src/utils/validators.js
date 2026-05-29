@@ -30,21 +30,41 @@ export const validatePassword = (password) => {
   return errors;
 };
 
-// Username validation function matching backend requirements
-export const validateUsername = (username) => {
+export const validateName = (name, fieldName) => {
   const errors = [];
   
-  if (!username) {
-    errors.push('Username is required');
+  if (!name?.trim()) {
+    errors.push(`${fieldName} is required`);
     return errors;
   }
   
-  if (!/^[a-zA-Z0-9_]*$/.test(username)) {
-    errors.push('Username can only contain letters, numbers, and underscores');
+  if (!/^[a-zA-Z ]{2,50}$/.test(name.trim())) {
+    errors.push(`${fieldName} can only contain letters and spaces`);
   }
   
-  if (username.length < 3) {
-    errors.push('Username must be at least 3 characters long');
+  return errors;
+};
+
+export const validateEmail = (email) => {
+  const errors = [];
+  
+  if (!email?.trim()) {
+    errors.push('Email address is required');
+    return errors;
+  }
+  
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    errors.push('Please enter a valid email address');
+  }
+  
+  return errors;
+};
+
+export const validateDateOfBirth = (dateOfBirth) => {
+  const errors = [];
+  
+  if (!dateOfBirth) {
+    errors.push('Date of birth is required');
   }
   
   return errors;

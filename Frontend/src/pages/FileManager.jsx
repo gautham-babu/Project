@@ -5,7 +5,6 @@ import { validateFile } from '../utils/validators';
 
 const FileManager = () => {
   const { uploadedFiles, loading } = useSelector((state) => state.files);
-  const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   
   const [selectedFiles, setSelectedFiles] = useState([]);

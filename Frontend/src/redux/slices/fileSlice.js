@@ -85,7 +85,7 @@ export const deleteFile = createAsyncThunk(
   'files/deleteFile',
   async (filename, { dispatch, rejectWithValue }) => {
     try {
-      const response = await apiClient.delete(`/delete/${filename}`);
+      await apiClient.delete(`/delete/${filename}`);
       
       // Dispatch success notification
       dispatchSuccess(dispatch, `File "${filename}" deleted successfully!`);

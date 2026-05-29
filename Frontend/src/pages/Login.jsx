@@ -6,7 +6,7 @@ import { useNotifications } from '../hooks/useNotifications.jsx';
 
 const Login = () => {
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: '',
   });
 
@@ -33,8 +33,8 @@ const Login = () => {
     e.preventDefault();
     
     // Client-side validation
-    if (!formData.username.trim()) {
-      notifyError('Username is required', 'Validation Error');
+    if (!formData.email.trim()) {
+      notifyError('Email address is required', 'Validation Error');
       return;
     }
     
@@ -75,17 +75,17 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                Username
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
               </label>
               <input
-                id="username"
-                name="username"
-                type="text"
+                id="email"
+                name="email"
+                type="email"
                 required
                 className="input-field"
-                placeholder="Enter your username"
-                value={formData.username}
+                placeholder="Enter your email address"
+                value={formData.email}
                 onChange={handleChange}
               />
             </div>

@@ -1,14 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import { register } from '../redux/slices/authSlice';
-import { validatePassword, validateUsername, getPasswordStrength } from '../utils/validators';
+import {
+  validateDateOfBirth,
+  validateEmail,
+  validateName,
+  validatePassword,
+  getPasswordStrength,
+} from '../utils/validators';
 
 const Register = () => {
   const [formData, setFormData] = useState({
-    username: '',
+    firstName: '',
+    lastName: '',
+    email: '',
     password: '',
     confirmPassword: '',
+    dateOfBirth: '',
   });
   const [validationErrors, setValidationErrors] = useState({});
   const [passwordStrength, setPasswordStrength] = useState(null);
@@ -43,13 +52,21 @@ const Register = () => {
   const validateForm = () => {
     const errors = {};
 
-    // Validate username
-    const usernameErrors = validateUsername(formData.username);
-    if (usernameErrors.length > 0) {
-      errors.username = usernameErrors[0];
+    const firstNameErrors = validateName(formData.firstName, 'First name');
+    if (firstNameErrors.length > 0) {
+      errors.firstName = firstNameErrors[0];
     }
 
-    // Validate password
+    const lastNameErrors = validateName(formData.lastName, 'Last name');
+    if (lastNameErrors.length > 0) {
+      errors.lastName = lastNameErrors[0];
+    }
+
+    const emailErrors = validateEmail(formData.email);
+    if (emailErrors.length > 0) {
+      errors.email = emailErrors[0];
+    }
+
     const passwordErrors = validatePassword(formData.password);
     if (passwordErrors.length > 0) {
       errors.password = passwordErrors.join('. ');
@@ -58,6 +75,11 @@ const Register = () => {
     // Validate confirm password
     if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = 'Passwords do not match';
+    }
+
+    const dateOfBirthErrors = validateDateOfBirth(formData.dateOfBirth);
+    if (dateOfBirthErrors.length > 0) {
+      errors.dateOfBirth = dateOfBirthErrors[0];
     }
 
     setValidationErrors(errors);
@@ -71,8 +93,14 @@ const Register = () => {
       return;
     }
 
-    const { username, password } = formData;
-    const result = await dispatch(register({ username, password }));
+    const result = await dispatch(register({
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password,
+      confirmPassword: formData.confirmPassword,
+      dateOfBirth: formData.dateOfBirth,
+    }));
 
     if (result.type === 'auth/register/fulfilled') {
       setTimeout(() => {
@@ -95,7 +123,7 @@ const Register = () => {
         backgroundRepeat: 'no-repeat',
       }}
     >
-      <div className="max-w-sm w-full mx-auto lg:mx-0 lg:ml-32 animate-fadeIn">
+      <div className="max-w-md w-full mx-auto lg:mx-0 lg:ml-32 animate-fadeIn">
         <div className="card backdrop-blur-sm bg-white/85 shadow-2xl">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-gray-900">Sign Up</h2>
@@ -103,26 +131,63 @@ const Register = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name
+                </label>
+                <input
+                  id="firstName"
+                  name="firstName"
+                  type="text"
+                  required
+                  className={`input-field ${validationErrors.firstName ? 'border-red-500' : ''}`}
+                  placeholder="First name"
+                  value={formData.firstName}
+                  onChange={handleChange}
+                />
+                {validationErrors.firstName && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.firstName}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name
+                </label>
+                <input
+                  id="lastName"
+                  name="lastName"
+                  type="text"
+                  required
+                  className={`input-field ${validationErrors.lastName ? 'border-red-500' : ''}`}
+                  placeholder="Last name"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                />
+                {validationErrors.lastName && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.lastName}</p>
+                )}
+              </div>
+            </div>
+
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                Username
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
               </label>
               <input
-                id="username"
-                name="username"
-                type="text"
+                id="email"
+                name="email"
+                type="email"
                 required
-                className={`input-field ${validationErrors.username ? 'border-red-500' : ''}`}
-                placeholder="Choose a username"
-                value={formData.username}
+                className={`input-field ${validationErrors.email ? 'border-red-500' : ''}`}
+                placeholder="you@example.com"
+                value={formData.email}
                 onChange={handleChange}
               />
-              {validationErrors.username && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.username}</p>
+              {validationErrors.email && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
               )}
-              <p className="mt-1 text-xs text-gray-500">
-                Only letters, numbers, and underscores allowed
-              </p>
             </div>
 
             <div>
@@ -191,6 +256,24 @@ const Register = () => {
               />
               {validationErrors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-600">{validationErrors.confirmPassword}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-1">
+                Date of Birth
+              </label>
+              <input
+                id="dateOfBirth"
+                name="dateOfBirth"
+                type="date"
+                required
+                className={`input-field ${validationErrors.dateOfBirth ? 'border-red-500' : ''}`}
+                value={formData.dateOfBirth}
+                onChange={handleChange}
+              />
+              {validationErrors.dateOfBirth && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.dateOfBirth}</p>
               )}
             </div>
 

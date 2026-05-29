@@ -5,7 +5,7 @@ import { getUserInfo } from '../redux/slices/authSlice';
 import apiClient from '../redux/api/apiClient';
 
 const Dashboard = () => {
-  const { user, loading } = useSelector((state) => state.auth);
+  const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   const [userStats, setUserStats] = useState({ storage_used_mb: 0, file_count: 0 });
   const [statsLoading, setStatsLoading] = useState(true);

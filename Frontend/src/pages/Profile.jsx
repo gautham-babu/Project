@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { updatePassword, deleteAccount } from '../redux/slices/authSlice';
+import { getUserInfo, updatePassword, deleteAccount } from '../redux/slices/authSlice';
 import { validatePassword, getPasswordStrength } from '../utils/validators';
 
 const Profile = () => {
-  const { user, loading } = useSelector((state) => state.auth);
+  const { user, profile, loading } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -19,6 +19,39 @@ const Profile = () => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [passwordStrength, setPasswordStrength] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [currentTime] = useState(() => Date.now());
+
+  useEffect(() => {
+    dispatch(getUserInfo());
+  }, [dispatch]);
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) return 'Not available';
+    return new Date(`${dateValue}T00:00:00`).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const formatAccountAge = (createdAt) => {
+    if (!createdAt) return 'Just created';
+
+    const createdDate = new Date(createdAt * 1000);
+    const diffMs = currentTime - createdDate.getTime();
+    const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+
+    if (diffDays === 0) return 'Created today';
+    if (diffDays === 1) return '1 day ago';
+    if (diffDays < 30) return `${diffDays} days ago`;
+
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths === 1) return '1 month ago';
+    if (diffMonths < 12) return `${diffMonths} months ago`;
+
+    const diffYears = Math.floor(diffDays / 365);
+    return diffYears === 1 ? '1 year ago' : `${diffYears} years ago`;
+  };
 
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
@@ -101,7 +134,7 @@ const Profile = () => {
         {/* User Info Card */}
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Account Information</h2>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex items-center space-x-3">
               <div className="bg-primary-100 p-3 rounded-xl">
                 <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -109,8 +142,21 @@ const Profile = () => {
                 </svg>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Username</p>
                 <p className="text-lg font-semibold text-gray-900">{user}</p>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4 pt-2">
+              <div className="rounded-xl bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">Date of Birth</p>
+                <p className="mt-1 font-semibold text-gray-900">
+                  {formatDate(profile?.dateOfBirth)}
+                </p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">Account Created</p>
+                <p className="mt-1 font-semibold text-gray-900">
+                  {formatAccountAge(profile?.createdAt)}
+                </p>
               </div>
             </div>
           </div>

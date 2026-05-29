@@ -41,7 +41,7 @@ export const useNotifications = () => {
 
   // Show warning notification
   const notifyWarning = (message, duration = 4000) => {
-    toast((t) => (
+    toast(() => (
       <div className="flex items-center space-x-2">
         <div className="w-5 h-5 text-yellow-500">
           <svg fill="currentColor" viewBox="0 0 20 20">
@@ -62,7 +62,7 @@ export const useNotifications = () => {
 
   // Show info notification
   const notifyInfo = (message, duration = 4000) => {
-    toast((t) => (
+    toast(() => (
       <div className="flex items-center space-x-2">
         <div className="w-5 h-5 text-blue-500">
           <svg fill="currentColor" viewBox="0 0 20 20">

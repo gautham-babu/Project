@@ -28,6 +28,30 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['UPLOADED_FILES_DEST'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 100*1024*1024 #100MB limit for uploads
 app.config['MAX_STORAGE_PER_USER'] = 1*1024*1024*1024  # 1 GB limit per user
+
+
+def init_database():
+    with sqlite3.connect("database.db") as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS users(
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                email TEXT PRIMARY KEY,
+                password TEXT NOT NULL,
+                date_of_birth TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        con.execute("CREATE TABLE IF NOT EXISTS blacklist(token TEXT)")
+        cur = con.cursor()
+        cur.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in cur.fetchall()]
+        if "created_at" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0")
+            con.execute("UPDATE users SET created_at = ? WHERE created_at = 0", (int(time()),))
+
+
+init_database()
 #Prevents brute-force attacks
 limiter = Limiter(
     get_remote_address,
@@ -90,12 +114,62 @@ def validate_password(password):
     
     return None  #Validation successful
 
+
+def validate_email(email):
+    if not email:
+        return "Email address is required"
+    if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        return "Please enter a valid email address"
+    return None
+
+
+def validate_name(value, field_name):
+    if not value:
+        return f"{field_name} is required"
+    if not re.match(r"^[a-zA-Z ]{2,50}$", value):
+        return f"{field_name} can only contain letters and spaces"
+    return None
+
+
+def validate_date_of_birth(date_of_birth):
+    if not date_of_birth:
+        return "Date of birth is required"
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_of_birth):
+        return "Date of birth must be in YYYY-MM-DD format"
+    return None
+
+
+def get_file_owner_prefix(email):
+    email_name = email.split("@", 1)[0]
+    return re.sub(r"[^a-zA-Z0-9_]", "_", email_name.lower())
+
 #User management: Fetching, updating password, or deleting users
 @app.route('/user', methods=['GET', 'PUT', 'DELETE'])
 @require_auth_token
 def manage_user(authenticated_user):
     if request.method == 'GET':
-        return {"message" : f"Welcome back, {authenticated_user}"}
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT first_name, last_name, email, date_of_birth, created_at FROM users WHERE email = ?",
+                (authenticated_user,)
+            )
+            row = cur.fetchone()
+
+        if not row:
+            return {"error" : "User not found."}, 404
+
+        first_name, last_name, email, date_of_birth, created_at = row
+        return {
+            "message" : f"Welcome back, {first_name}",
+            "user": {
+                "firstName": first_name,
+                "lastName": last_name,
+                "email": email,
+                "dateOfBirth": date_of_birth,
+                "createdAt": created_at
+            }
+        }
     if request.method == 'PUT':
         data = request.get_json()
         current_password = data.get('currentPassword')
@@ -113,7 +187,7 @@ def manage_user(authenticated_user):
 
         with sqlite3.connect("database.db") as con:
             cur = con.cursor()
-            cur.execute("SELECT password FROM users WHERE username = ?", (authenticated_user,))
+            cur.execute("SELECT password FROM users WHERE email = ?", (authenticated_user,))
             row = cur.fetchone()
             if not row:
                 return {"error" : "User not found."}, 404
@@ -123,7 +197,7 @@ def manage_user(authenticated_user):
                 return {"error" : "Current password is incorrect."}, 400
 
             new_hashed = generate_password_hash(new_password)
-            con.execute("UPDATE users SET password = ? WHERE username = ?", (new_hashed, authenticated_user))
+            con.execute("UPDATE users SET password = ? WHERE email = ?", (new_hashed, authenticated_user))
 
         return {"message" : "Password updated successfully."}
 
@@ -136,10 +210,10 @@ def manage_user(authenticated_user):
             upload_dir = app.config['UPLOADED_FILES_DEST']
             all_files = os.listdir(upload_dir)
             
+            owner_prefix = get_file_owner_prefix(authenticated_user)
             files_deleted = 0
             for filename in all_files:
-                # Check if file belongs to user (both patterns: username.ext and username_N.ext)
-                if filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_"):
+                if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
                     file_path = os.path.join(upload_dir, filename)
                     try:
                         os.remove(file_path)
@@ -154,7 +228,7 @@ def manage_user(authenticated_user):
             
         with sqlite3.connect("database.db") as con:
             #Delete user record and invalidate their current token
-            con.execute("DELETE FROM users WHERE username = ?", (authenticated_user,))
+            con.execute("DELETE FROM users WHERE email = ?", (authenticated_user,))
             con.execute("INSERT INTO blacklist(token) VALUES(?)", (token_to_delete,))
             
         return {"message" : "Account deleted successfully."}
@@ -164,33 +238,47 @@ def manage_user(authenticated_user):
 def register():
     data = request.get_json()
     
-    if not data or not data.get('username') or not data.get('password'):
-        return {"error" : "Username and password are required"}, 400
+    required_fields = ['firstName', 'lastName', 'email', 'password', 'confirmPassword', 'dateOfBirth']
+    if not data or any(not data.get(field) for field in required_fields):
+        return {"error" : "All registration fields are required"}, 400
 
-    username = data.get('username').strip().lower() #Removes spaces and lowercase conversion
+    first_name = data.get('firstName').strip()
+    last_name = data.get('lastName').strip()
+    email = data.get('email').strip().lower()
     password = data.get('password')
+    confirm_password = data.get('confirmPassword')
+    date_of_birth = data.get('dateOfBirth').strip()
 
-    if not re.match("^[a-zA-Z0-9_]*$", username):
-        return {"error" : "Username can only contain letters, numbers, and underscores"}, 400
+    for field_error in (
+        validate_name(first_name, "First name"),
+        validate_name(last_name, "Last name"),
+        validate_email(email),
+        validate_date_of_birth(date_of_birth),
+    ):
+        if field_error:
+            return {"error" : field_error}, 400
     
     password_error = validate_password(password)
     if password_error:
         return {"error" : password_error}, 400
+
+    if password != confirm_password:
+        return {"error" : "Passwords do not match"}, 400
 
     hashed_password = generate_password_hash(password)
 
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
 
-        con.execute("CREATE TABLE IF NOT EXISTS users(username TEXT, password TEXT)")
-        con.execute("CREATE TABLE IF NOT EXISTS blacklist(token TEXT)")
-
-        cur.execute("SELECT * FROM users WHERE username=?", (username,))
+        cur.execute("SELECT * FROM users WHERE email=?", (email,))
         existing_user = cur.fetchone()
         if existing_user:
-            return {"error" : "Username not available"}, 409
+            return {"error" : "Email address is already registered"}, 409
             
-        con.execute("INSERT INTO users(username, password) VALUES(?, ?)", (username, hashed_password))
+        con.execute(
+            "INSERT INTO users(first_name, last_name, email, password, date_of_birth, created_at) VALUES(?, ?, ?, ?, ?, ?)",
+            (first_name, last_name, email, hashed_password, date_of_birth, int(time()))
+        )
 
     return {"message" : "User registered successfully."}, 201
 
@@ -199,25 +287,33 @@ def register():
 def login():
     data = request.get_json()
 
-    if not data or not data.get('username') or not data.get('password'):
-        return {"error": "Username and password are required"}, 400
+    if not data or not data.get('email') or not data.get('password'):
+        return {"error": "Email address and password are required"}, 400
 
-    username = data.get('username').strip().lower()
+    email = data.get('email').strip().lower()
         
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
-        cur.execute("SELECT password FROM users WHERE username=?", (username,))
-        user_pass = cur.fetchone()
+        cur.execute("SELECT first_name, last_name, password FROM users WHERE email=?", (email,))
+        user_row = cur.fetchone()
 
-    if user_pass and check_password_hash(user_pass[0], data['password']):
+    if user_row and check_password_hash(user_row[2], data['password']):
         token = jwt.encode({
-            'user': username,
+            'user': email,
             'exp': int(time()) + 3600  #5 mins expiry
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
-        return {"message" : "Welcome", "token": token}
+        return {
+            "message" : "Welcome",
+            "token": token,
+            "user": {
+                "firstName": user_row[0],
+                "lastName": user_row[1],
+                "email": email
+            }
+        }
         
-    return {"error" : "Wrong username or password"}, 401
+    return {"error" : "Wrong email address or password"}, 401
 
 #Rate-limited requests 
 @app.errorhandler(429)
@@ -260,10 +356,11 @@ def upload_file(authenticated_user):
     try:
         upload_dir = app.config['UPLOADED_FILES_DEST']
         all_files = os.listdir(upload_dir)
+        owner_prefix = get_file_owner_prefix(authenticated_user)
         
         current_storage = 0
         for filename in all_files:
-            if filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_"):
+            if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
                 file_path = os.path.join(upload_dir, filename)
                 current_storage += os.path.getsize(file_path)
     except Exception:
@@ -287,7 +384,7 @@ def upload_file(authenticated_user):
     
     for file in files_to_upload:
         try:
-            saved_filename = user_files.save(file, name=f"{authenticated_user}_.")
+            saved_filename = user_files.save(file, name=f"{get_file_owner_prefix(authenticated_user)}.")
             uploaded_files.append({
                 "filename": saved_filename,
                 "download_link": f"{request.host_url}download/{saved_filename}"
@@ -313,8 +410,8 @@ def upload_file(authenticated_user):
 @app.route('/download/<filename>', methods=['GET'])
 @require_auth_token
 def download_file(authenticated_user, filename):
-    #Ensure they only download their own files (handle both patterns: username.ext and username_N.ext)
-    if not (filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_")):
+    owner_prefix = get_file_owner_prefix(authenticated_user)
+    if not (filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_")):
         return {"error" : "Unauthorized. You can only download your own files."}, 403
 
     #Send the file from the destination folder
@@ -325,7 +422,8 @@ def download_file(authenticated_user, filename):
 @require_auth_token
 def delete_file(authenticated_user, filename):
     #Ensure they only delete their own files
-    if not (filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_")):
+    owner_prefix = get_file_owner_prefix(authenticated_user)
+    if not (filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_")):
         return {"error" : "Unauthorized. You can only delete your own files."}, 403
     
     try:
@@ -345,17 +443,18 @@ def list_user_files(authenticated_user):
     try:
         upload_dir = app.config['UPLOADED_FILES_DEST']
         all_files = os.listdir(upload_dir)
+        owner_prefix = get_file_owner_prefix(authenticated_user)
         
         # Filter files that belong to the authenticated user
         user_files_list = []
         for filename in all_files:
-            # Check if file belongs to user (starts with username or username_number)
-            if filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_"):
+            # Check if file belongs to the authenticated user's safe file prefix
+            if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
                 file_path = os.path.join(upload_dir, filename)
                 file_stat = os.stat(file_path)
                 
-                # Extract original filename - everything after the username and number
-                if filename.startswith(f"{authenticated_user}."):
+                # Extract original filename - currently this is the stored filename
+                if filename.startswith(f"{owner_prefix}."):
                     # First file: gautham.pdf -> original: pdf (but we want full extension)
                     original_name = filename
                 else:
@@ -387,13 +486,14 @@ def get_user_stats(authenticated_user):
     try:
         upload_dir = app.config['UPLOADED_FILES_DEST']
         all_files = os.listdir(upload_dir)
+        owner_prefix = get_file_owner_prefix(authenticated_user)
         
         total_storage = 0
         file_count = 0
         
         # Calculate storage and count for user's files
         for filename in all_files:
-            if filename.startswith(f"{authenticated_user}.") or filename.startswith(f"{authenticated_user}_"):
+            if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
                 file_path = os.path.join(upload_dir, filename)
                 file_stat = os.stat(file_path)
                 total_storage += file_stat.st_size
