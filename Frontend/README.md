@@ -126,7 +126,9 @@ The frontend integrates with these backend endpoints:
 - **GET** `/user` - Get user profile
 - **POST** `/refresh` - Refresh JWT token
 - **POST** `/upload` - File upload
-- **GET** `/download/:filename` - File download
+- **GET** `/download/:id` - File download using UUID-backed file IDs
+- **DELETE** `/delete/:id` - Delete a file using UUID-backed file IDs
+- **GET** `/files` - List uploaded files with metadata
 
 ## Security Features
 

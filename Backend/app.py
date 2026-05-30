@@ -1,4 +1,4 @@
-import sqlite3, jwt, re, os
+import sqlite3, jwt, re, os, uuid
 from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from time import time
@@ -43,6 +43,17 @@ def init_database():
             )
         """)
         con.execute("CREATE TABLE IF NOT EXISTS blacklist(token TEXT)")
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS file_map(
+                id TEXT PRIMARY KEY,
+                owner_email TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                stored_name TEXT NOT NULL UNIQUE,
+                size INTEGER NOT NULL,
+                uploaded_at INTEGER NOT NULL,
+                FOREIGN KEY(owner_email) REFERENCES users(email)
+            )
+        """)
         cur = con.cursor()
         cur.execute("PRAGMA table_info(users)")
         columns = [column[1] for column in cur.fetchall()]
@@ -139,10 +150,6 @@ def validate_date_of_birth(date_of_birth):
     return None
 
 
-def get_file_owner_prefix(email):
-    email_name = email.split("@", 1)[0]
-    return re.sub(r"[^a-zA-Z0-9_]", "_", email_name.lower())
-
 #User management: Fetching, updating password, or deleting users
 @app.route('/user', methods=['GET', 'PUT', 'DELETE'])
 @require_auth_token
@@ -204,33 +211,33 @@ def manage_user(authenticated_user):
     if request.method == 'DELETE':
         auth_header = request.headers.get('Authorization')
         token_to_delete = auth_header.split(" ")[1] if " " in auth_header else auth_header
-        
+
         # Delete all files belonging to the user before deleting the account
         try:
             upload_dir = app.config['UPLOADED_FILES_DEST']
-            all_files = os.listdir(upload_dir)
-            
-            owner_prefix = get_file_owner_prefix(authenticated_user)
-            files_deleted = 0
-            for filename in all_files:
-                if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
-                    file_path = os.path.join(upload_dir, filename)
-                    try:
+            with sqlite3.connect("database.db") as con:
+                cur = con.cursor()
+                cur.execute("SELECT stored_name FROM file_map WHERE owner_email = ?", (authenticated_user,))
+                stored_files = cur.fetchall()
+
+            for (stored_name,) in stored_files:
+                file_path = os.path.join(upload_dir, stored_name)
+                try:
+                    if os.path.exists(file_path):
                         os.remove(file_path)
-                        files_deleted += 1
-                    except OSError:
-                        # Continue deleting other files even if one fails
-                        pass
-            
+                except OSError:
+                    # Continue deleting other files even if one fails
+                    pass
         except Exception:
             # Continue with account deletion even if file deletion fails
             pass
-            
+
         with sqlite3.connect("database.db") as con:
-            #Delete user record and invalidate their current token
+            # Delete user record, user files metadata, and invalidate their current token
+            con.execute("DELETE FROM file_map WHERE owner_email = ?", (authenticated_user,))
             con.execute("DELETE FROM users WHERE email = ?", (authenticated_user,))
             con.execute("INSERT INTO blacklist(token) VALUES(?)", (token_to_delete,))
-            
+
         return {"message" : "Account deleted successfully."}
 
 #Creates a new user
@@ -352,44 +359,54 @@ def upload_file(authenticated_user):
     if not files_to_upload or (len(files_to_upload) == 1 and files_to_upload[0].filename == ''):
         return {"error" : "No valid files provided"}, 400
     
-    # Calculate user's current storage
+    # Calculate user's current storage using mapped file metadata
     try:
-        upload_dir = app.config['UPLOADED_FILES_DEST']
-        all_files = os.listdir(upload_dir)
-        owner_prefix = get_file_owner_prefix(authenticated_user)
-        
-        current_storage = 0
-        for filename in all_files:
-            if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
-                file_path = os.path.join(upload_dir, filename)
-                current_storage += os.path.getsize(file_path)
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute("SELECT COALESCE(SUM(size), 0) FROM file_map WHERE owner_email = ?", (authenticated_user,))
+            current_storage = cur.fetchone()[0] or 0
     except Exception:
         return {"error" : "Failed to check storage"}, 500
     
     # Calculate total size of files to upload
     total_upload_size = 0
     for file in files_to_upload:
-        file.seek(0, 2)  # Seek to end
-        total_upload_size += file.tell()
-        file.seek(0)  # Reset to beginning
+        file.stream.seek(0, os.SEEK_END)
+        total_upload_size += file.stream.tell()
+        file.stream.seek(0)
     
     # Check if adding these files would exceed the limit
     if current_storage + total_upload_size > app.config['MAX_STORAGE_PER_USER']:
         max_storage_gb = app.config['MAX_STORAGE_PER_USER'] / (1024 * 1024 * 1024)
         return {"error" : f"Storage limit exceeded. Maximum {max_storage_gb}GB per user."}, 413
     
-    # Save files
+    # Save files using UUID-backed storage names
     uploaded_files = []
     errors = []
-    
+    upload_dir = app.config['UPLOADED_FILES_DEST']
+
     for file in files_to_upload:
         try:
-            saved_filename = user_files.save(file, name=f"{get_file_owner_prefix(authenticated_user)}.")
+            file_id = str(uuid.uuid4())
+            extension = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+            stored_name = f"{file_id}.{extension}" if extension else file_id
+            saved_filename = user_files.save(file, name=stored_name)
+            saved_path = os.path.join(upload_dir, saved_filename)
+            file_size = os.path.getsize(saved_path)
+            uploaded_at = int(time())
+
+            with sqlite3.connect("database.db") as con:
+                con.execute(
+                    "INSERT INTO file_map(id, owner_email, original_name, stored_name, size, uploaded_at) VALUES(?, ?, ?, ?, ?, ?)",
+                    (file_id, authenticated_user, file.filename, saved_filename, file_size, uploaded_at)
+                )
+
             uploaded_files.append({
-                "filename": saved_filename,
-                "download_link": f"{request.host_url}download/{saved_filename}"
+                "id": file_id,
+                "original_name": file.filename,
+                "download_link": f"{request.host_url}download/{file_id}"
             })
-        except Exception as e:
+        except Exception:
             errors.append(f"{file.filename}: Invalid file format")
     
     if not uploaded_files:
@@ -407,33 +424,61 @@ def upload_file(authenticated_user):
 
 
 #Gives files only to the owners who uploaded them
-@app.route('/download/<filename>', methods=['GET'])
+@app.route('/download/<file_id>', methods=['GET'])
 @require_auth_token
-def download_file(authenticated_user, filename):
-    owner_prefix = get_file_owner_prefix(authenticated_user)
-    if not (filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_")):
-        return {"error" : "Unauthorized. You can only download your own files."}, 403
+def download_file(authenticated_user, file_id):
+    try:
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT stored_name, original_name FROM file_map WHERE id = ? AND owner_email = ?",
+                (file_id, authenticated_user)
+            )
+            row = cur.fetchone()
 
-    #Send the file from the destination folder
-    return send_from_directory(app.config['UPLOADED_FILES_DEST'], filename, as_attachment=True)
+        if not row:
+            return {"error" : "File not found."}, 404
+
+        stored_name, original_name = row
+        file_path = os.path.join(app.config['UPLOADED_FILES_DEST'], stored_name)
+        if not os.path.exists(file_path):
+            return {"error" : "File not accessible."}, 404
+
+        return send_from_directory(
+            app.config['UPLOADED_FILES_DEST'],
+            stored_name,
+            as_attachment=True,
+            download_name=original_name
+        )
+    except Exception:
+        return {"error" : "Failed to download file."}, 500
 
 #Delete a file - only by the owner
-@app.route('/delete/<filename>', methods=['DELETE'])
+@app.route('/delete/<file_id>', methods=['DELETE'])
 @require_auth_token
-def delete_file(authenticated_user, filename):
-    #Ensure they only delete their own files
-    owner_prefix = get_file_owner_prefix(authenticated_user)
-    if not (filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_")):
-        return {"error" : "Unauthorized. You can only delete your own files."}, 403
-    
+def delete_file(authenticated_user, file_id):
     try:
-        file_path = os.path.join(app.config['UPLOADED_FILES_DEST'], filename)
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT stored_name FROM file_map WHERE id = ? AND owner_email = ?",
+                (file_id, authenticated_user)
+            )
+            row = cur.fetchone()
+
+        if not row:
+            return {"error" : "File not found."}, 404
+
+        stored_name = row[0]
+        file_path = os.path.join(app.config['UPLOADED_FILES_DEST'], stored_name)
         if os.path.exists(file_path):
             os.remove(file_path)
-            return {"message" : "File deleted successfully."}, 200
-        else:
-            return {"error" : "File not found."}, 404
-    except Exception as e:
+
+        with sqlite3.connect("database.db") as con:
+            con.execute("DELETE FROM file_map WHERE id = ?", (file_id,))
+
+        return {"message" : "File deleted successfully."}, 200
+    except Exception:
         return {"error" : "Failed to delete file."}, 500
 
 #List user's uploaded files
@@ -441,38 +486,31 @@ def delete_file(authenticated_user, filename):
 @require_auth_token
 def list_user_files(authenticated_user):
     try:
-        upload_dir = app.config['UPLOADED_FILES_DEST']
-        all_files = os.listdir(upload_dir)
-        owner_prefix = get_file_owner_prefix(authenticated_user)
-        
-        # Filter files that belong to the authenticated user
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT id, original_name, stored_name, size, uploaded_at FROM file_map WHERE owner_email = ? ORDER BY uploaded_at DESC",
+                (authenticated_user,)
+            )
+            rows = cur.fetchall()
+
         user_files_list = []
-        for filename in all_files:
-            # Check if file belongs to the authenticated user's safe file prefix
-            if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
-                file_path = os.path.join(upload_dir, filename)
-                file_stat = os.stat(file_path)
-                
-                # Extract original filename - currently this is the stored filename
-                if filename.startswith(f"{owner_prefix}."):
-                    # First file: gautham.pdf -> original: pdf (but we want full extension)
-                    original_name = filename
-                else:
-                    # Numbered files: gautham_1.pdf -> extract original extension
-                    original_name = filename
-                    
-                user_files_list.append({
-                    "filename": filename,
-                    "original_name": filename,  # For now, show the full filename
-                    "size": file_stat.st_size,
-                    "uploaded_at": file_stat.st_mtime
-                })
-        
-        # Sort by upload time (most recent first)
-        user_files_list.sort(key=lambda x: x["uploaded_at"], reverse=True)
-        
+        upload_dir = app.config['UPLOADED_FILES_DEST']
+        for row in rows:
+            stored_name = row[2]
+            file_path = os.path.join(upload_dir, stored_name)
+            accessible = os.path.exists(file_path)
+            user_files_list.append({
+                "id": row[0],
+                "original_name": row[1],
+                "size": row[3] if accessible else 0,
+                "uploaded_at": row[4],
+                "accessible": accessible,
+                "download_link": f"{request.host_url}download/{row[0]}" if accessible else None
+            })
+
         return {"files": user_files_list}, 200
-    except Exception as e:
+    except Exception:
         return {"error": "Failed to retrieve files"}, 500
 
 @app.errorhandler(413)
@@ -485,33 +523,29 @@ def file_too_large(e):
 def get_user_stats(authenticated_user):
     try:
         upload_dir = app.config['UPLOADED_FILES_DEST']
-        all_files = os.listdir(upload_dir)
-        owner_prefix = get_file_owner_prefix(authenticated_user)
-        
         total_storage = 0
         file_count = 0
-        
-        # Calculate storage and count for user's files
-        for filename in all_files:
-            if filename.startswith(f"{owner_prefix}.") or filename.startswith(f"{owner_prefix}_"):
-                file_path = os.path.join(upload_dir, filename)
-                file_stat = os.stat(file_path)
-                total_storage += file_stat.st_size
-                file_count += 1
-        
-        # Convert bytes to MB
+
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT stored_name, size FROM file_map WHERE owner_email = ?",
+                (authenticated_user,)
+            )
+            for stored_name, size in cur.fetchall():
+                file_path = os.path.join(upload_dir, stored_name)
+                if os.path.exists(file_path):
+                    total_storage += size
+                    file_count += 1
+
         storage_mb = round(total_storage / (1024 * 1024), 2)
-        
+
         return {
             "storage_used_mb": storage_mb,
             "file_count": file_count
         }, 200
-    except Exception as e:
+    except Exception:
         return {"error": "Failed to retrieve user stats"}, 500
-
-@app.errorhandler(413)
-def file_too_large(e):
-    return {"error" : "File exceeds the 100MB limit. Please upload a smaller file."}, 413
 
 @app.route('/')
 def home():

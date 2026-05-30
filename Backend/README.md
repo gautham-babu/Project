@@ -96,9 +96,10 @@ The API will be accessible at `http://127.0.0.1:5000`.
 | --- | --- | --- |
 | `/register` | POST | Register a new user |
 | `/login` | POST | Login and receive JWT (10/min limit) |
-| `/user` | GET/PUT/DELETE | Profile management and Account deletion |
+| `/user` | GET/PUT/DELETE | Profile management and account deletion |
 | `/refresh` | POST | Invalidate old token and get a new one |
-| `/upload` | POST | Securely upload a file (Max 100MB) |
-| `/download/<file>` | GET | Download owned files |
-
----
+| `/upload` | POST | Securely upload file(s) (Max 100MB each) |
+| `/download/<file_id>` | GET | Download owned file by UUID |
+| `/delete/<file_id>` | DELETE | Delete owned file by UUID |
+| `/files` | GET | List uploaded files with metadata |
+| `/user/stats` | GET | Get user storage and file usage stats |

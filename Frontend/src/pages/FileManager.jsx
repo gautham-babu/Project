@@ -87,12 +87,12 @@ const FileManager = () => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleDownload = (filename) => {
-    dispatch(downloadFile(filename));
+  const handleDownload = (file) => {
+    dispatch(downloadFile({ id: file.id, original_name: file.original_name }));
   };
 
-  const handleDelete = async (filename) => {
-    const result = await dispatch(deleteFile(filename));
+  const handleDelete = async (id) => {
+    const result = await dispatch(deleteFile(id));
     if (result.type === 'files/deleteFile/fulfilled') {
       // Refresh file list after deletion
       setCurrentPage(1);
@@ -100,10 +100,13 @@ const FileManager = () => {
     }
   };
 
-  // Filter files by search query
-  const filteredFiles = uploadedFiles.filter((file) =>
-    file.filename.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter files by search query and sort by upload date descending
+  const filteredFiles = uploadedFiles
+    .filter((file) =>
+      file.original_name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .slice()
+    .sort((a, b) => (b.uploaded_at || 0) - (a.uploaded_at || 0));
 
   // Pagination logic
   const totalPages = Math.ceil(filteredFiles.length / itemsPerPage);
@@ -131,6 +134,14 @@ const FileManager = () => {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const formatTime = (timestamp) => {
+    if (!timestamp) return 'Unknown time';
+    return new Date(timestamp * 1000).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const getFileIcon = (filename) => {
     const ext = filename.split('.').pop().toLowerCase();
     const iconColors = {
@@ -147,6 +158,31 @@ const FileManager = () => {
     
     return iconColors[ext] || 'text-gray-600';
   };
+
+  const formatDateHeading = (timestamp) => {
+    if (!timestamp) return 'Unknown date';
+
+    const current = new Date();
+    const date = new Date(timestamp * 1000);
+    const diffDays = Math.floor((current.setHours(0, 0, 0, 0) - new Date(date).setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+
+    return date.toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const groupedFilesByDate = paginatedFiles.reduce((groups, file) => {
+    const heading = formatDateHeading(file.uploaded_at);
+    if (!groups[heading]) groups[heading] = [];
+    groups[heading].push(file);
+    return groups;
+  }, {});
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -319,59 +355,66 @@ const FileManager = () => {
           </div>
         ) : (
           <>
-            <div className="space-y-3">
-              {paginatedFiles.map((file, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center space-x-3 flex-1">
-                    <svg
-                      className={`w-8 h-8 ${getFileIcon(file.filename)}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">
-                        {file.filename}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {file.uploaded_at ? new Date(file.uploaded_at * 1000).toLocaleString() : 'Recently uploaded'}
-                        {file.size && ` • ${formatFileSize(file.size)}`}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDownload(file.filename)}
-                    className="btn-primary text-sm ml-4"
-                    disabled={loading}
-                  >
-                    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Download
-                  </button>
-                  <button
-                    onClick={() => handleDelete(file.filename)}
-                    className="btn-danger text-sm ml-2"
-                    disabled={loading}
-                  >
-                    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3H4v2h16V7h-3.5z" />
-                    </svg>
-                    Delete
-                  </button>
+            {Object.entries(groupedFilesByDate).map(([heading, files]) => (
+              <div key={heading} className="space-y-4">
+                <div className="px-4 py-2 bg-gray-100 rounded-2xl">
+                  <p className="text-sm font-semibold text-gray-700">{heading}</p>
                 </div>
-              ))}
-            </div>
+                <div className="space-y-3">
+                  {files.map((file, index) => (
+                    <div
+                      key={file.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3 flex-1">
+                        <svg
+                          className={`w-8 h-8 ${getFileIcon(file.original_name)}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">
+                            {file.original_name}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {file.uploaded_at ? formatTime(file.uploaded_at) : 'Recently uploaded'}
+                            {file.accessible ? ` • ${formatFileSize(file.size)}` : ' • File not accessible'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDownload(file)}
+                        className="btn-primary text-sm ml-4"
+                        disabled={loading || !file.accessible}
+                      >
+                        <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download
+                      </button>
+                      <button
+                        onClick={() => handleDelete(file.id)}
+                        className="btn-danger text-sm ml-2"
+                        disabled={loading}
+                      >
+                        <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3H4v2h16V7h-3.5z" />
+                        </svg>
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
 
             {/* Pagination Controls */}
             {totalPages > 1 && (

@@ -51,9 +51,9 @@ export const fetchUserFiles = createAsyncThunk(
 
 export const downloadFile = createAsyncThunk(
   'files/downloadFile',
-  async (filename, { dispatch, rejectWithValue }) => {
+  async ({ id, original_name }, { dispatch, rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/download/${filename}`, {
+      const response = await apiClient.get(`/download/${id}`, {
         responseType: 'blob',
       });
       
@@ -62,8 +62,8 @@ export const downloadFile = createAsyncThunk(
       const link = document.createElement('a');
       link.href = url;
       
-      // Use the filename as-is, since it's already properly named by the backend
-      link.setAttribute('download', filename);
+      // Use the original file name for the downloaded file
+      link.setAttribute('download', original_name);
       
       document.body.appendChild(link);
       link.click();
@@ -71,9 +71,9 @@ export const downloadFile = createAsyncThunk(
       window.URL.revokeObjectURL(url);
       
       // Dispatch success notification
-      dispatchSuccess(dispatch, `File "${filename}" downloaded successfully!`);
+      dispatchSuccess(dispatch, `File "${original_name}" downloaded successfully!`);
       
-      return { filename, message: 'Download started' };
+      return { id, message: 'Download started' };
     } catch (error) {
       dispatchError(dispatch, error, 'File Download');
       return rejectWithValue(error.response?.data?.error || 'File download failed');
@@ -83,14 +83,14 @@ export const downloadFile = createAsyncThunk(
 
 export const deleteFile = createAsyncThunk(
   'files/deleteFile',
-  async (filename, { dispatch, rejectWithValue }) => {
+  async (id, { dispatch, rejectWithValue }) => {
     try {
-      await apiClient.delete(`/delete/${filename}`);
+      await apiClient.delete(`/delete/${id}`);
       
       // Dispatch success notification
-      dispatchSuccess(dispatch, `File "${filename}" deleted successfully!`);
+      dispatchSuccess(dispatch, `File deleted successfully!`);
       
-      return { filename, message: 'File deleted' };
+      return { id, message: 'File deleted' };
     } catch (error) {
       dispatchError(dispatch, error, 'File Delete');
       return rejectWithValue(error.response?.data?.error || 'File delete failed');
