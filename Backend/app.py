@@ -567,39 +567,84 @@ def list_user_files(authenticated_user):
 
 # Share creation helpers
 def send_share_email(recipient_email, sender_name, share_url, file_name, expires_at):
-    resend_api_key = os.getenv('RESEND_API_KEY')
-    sender_address = os.getenv('SENDER_EMAIL')
-    if not resend_api_key or not sender_address:
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.image import MIMEImage
+    from datetime import datetime
+
+    smtp_email = os.getenv('SMTP_EMAIL')
+    smtp_password = os.getenv('SMTP_PASSWORD')
+    if not smtp_email or not smtp_password:
         return False
 
-    subject = f"{sender_name} shared a file with you"
-    html_content = f"<p>{sender_name} has shared <strong>{file_name}</strong> with you.</p>"
-    html_content += f"<p><a href=\"{share_url}\">Open shared file</a></p>"
-    html_content += f"<p>Link expires: {expires_at}</p>"
+    # Format the UNIX timestamp to a human-readable date/time string
+    try:
+        expires_datetime = datetime.fromtimestamp(expires_at)
+        formatted_expiry = expires_datetime.strftime("%B %d, %Y at %I:%M %p")
+    except Exception:
+        formatted_expiry = "unknown time"
 
-    payload = {
-        "from": sender_address,
-        "to": [recipient_email],
-        "subject": subject,
-        "html": html_content,
-    }
+    # Attempt to load the logo image
+    logo_data = None
+    try:
+        logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static/airshare-logo.png'))
+        if os.path.exists(logo_path):
+            with open(logo_path, 'rb') as f:
+                logo_data = f.read()
+    except Exception as e:
+        print(f"Error loading logo: {e}")
 
-    request_data = json.dumps(payload).encode('utf-8')
-    request_headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {resend_api_key}'
-    }
-    request_obj = urllib.request.Request(
-        'https://api.resend.com/emails',
-        data=request_data,
-        headers=request_headers,
-        method='POST'
-    )
+    subject = f"{sender_name} shared a file with you via AirShare"
+
+    # Use 'related' to allow inline images referenced by 'cid:'
+    msg = MIMEMultipart('related')
+    msg['Subject'] = subject
+    msg['From'] = smtp_email
+    msg['To'] = recipient_email
+
+    # Alternative container for text and html versions
+    msg_alternative = MIMEMultipart('alternative')
+    msg.attach(msg_alternative)
+
+    if logo_data:
+        logo_html = '<img src="cid:logo_img" alt="AirShare" style="max-width: 120px; height: auto; margin-bottom: 15px; display: block;">'
+    else:
+        logo_html = '<h2 style="color: #3b82f6; margin-top: 0;">AirShare</h2>'
+
+    # Simple, clean HTML email template
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+      {logo_html}
+      <p><strong>{sender_name}</strong> has shared a file:</p>
+      <p style="background: #f3f4f6; padding: 10px; border-radius: 4px; font-weight: bold; word-break: break-all;">{file_name}</p>
+      <p style="margin: 20px 0;"><a href="{share_url}" style="display: inline-block; background: #3b82f6; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">View & Download File</a></p>
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+      <p style="font-size: 12px; color: #666; margin: 0;">This secure link expires on <span style="color: #ef4444; font-weight: bold;">{formatted_expiry}</span>.</p>
+    </div>
+    """
+
+    msg_alternative.attach(MIMEText(html_content, 'html'))
+
+    # Attach logo image
+    if logo_data:
+        try:
+            mime_img = MIMEImage(logo_data)
+            mime_img.add_header('Content-ID', '<logo_img>')
+            mime_img.add_header('Content-Disposition', 'inline', filename='airshare-logo.png')
+            msg.attach(mime_img)
+        except Exception as e:
+            print(f"Error attaching logo: {e}")
 
     try:
-        with urllib.request.urlopen(request_obj, timeout=10) as response:
-            return response.status == 200 or response.status == 202
-    except Exception:
+        # Use context manager (with statement) to automatically close connection safely
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()  # Secure the connection
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, [recipient_email], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"SMTP Error: {e}")
         return False
 
 @app.route('/share', methods=['POST'])
@@ -628,6 +673,15 @@ def create_share_link(authenticated_user):
             return {"error": "File not found or you do not have permission to share it."}, 404
 
         file_name = row[0]
+
+        # Retrieve sender's first and last name from users table
+        cur.execute(
+            "SELECT first_name, last_name FROM users WHERE email = ?",
+            (authenticated_user,)
+        )
+        user_row = cur.fetchone()
+        sender_display_name = f"{user_row[0]} {user_row[1]}" if user_row else authenticated_user
+
         token = uuid.uuid4().hex
         created_at = int(time())
         expires_at = created_at + expires_in_hours * 3600
@@ -638,8 +692,7 @@ def create_share_link(authenticated_user):
         )
 
     share_url = f"{request.host_url.rstrip('/')}/share/{token}"
-    sender_name = authenticated_user
-    send_share_email(recipient_email, sender_name, share_url, file_name, expires_at)
+    send_share_email(recipient_email, sender_display_name, share_url, file_name, expires_at)
 
     return {
         "message": "Share link created successfully.",

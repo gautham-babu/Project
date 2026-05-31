@@ -74,7 +74,8 @@ pip install -r requirements.txt
 ```text
 # Create a .env file inside the Backend folder
 SECRET_KEY=your_random_key
-
+SMTP_EMAIL=your_gmail@gmail.com
+SMTP_PASSWORD=your_16_character_google_app_password
 ```
 
 ### 6. Create Upload Directory
