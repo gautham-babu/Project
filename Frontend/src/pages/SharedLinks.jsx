@@ -76,8 +76,8 @@ const SharedLinks = () => {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
                           <div>
-                            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">File ID</p>
-                            <p className="font-medium text-gray-900 truncate mt-1 max-w-[200px]" title={share.fileId}>{share.fileId}</p>
+                            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">File Name</p>
+                            <p className="font-medium text-gray-900 truncate mt-1 max-w-[200px]" title={share.fileName}>{share.fileName}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Recipient</p>

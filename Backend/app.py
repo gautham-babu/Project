@@ -717,18 +717,21 @@ def list_share_links(authenticated_user):
         with sqlite3.connect('database.db') as con:
             cur = con.cursor()
             cur.execute(
-                "SELECT token, file_id, recipient_email, created_at, expires_at, access_count, last_accessed_at, status "
-                "FROM share_links WHERE owner_email = ? ORDER BY created_at DESC",
+                "SELECT sl.token, sl.file_id, fm.original_name, sl.recipient_email, sl.created_at, sl.expires_at, sl.access_count, sl.last_accessed_at, sl.status "
+                "FROM share_links sl "
+                "LEFT JOIN file_map fm ON sl.file_id = fm.id "
+                "WHERE sl.owner_email = ? ORDER BY sl.created_at DESC",
                 (authenticated_user,)
             )
             rows = cur.fetchall()
 
             frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
             share_links = []
-            for token, file_id, recipient_email, created_at, expires_at, access_count, last_accessed_at, status in rows:
+            for token, file_id, original_name, recipient_email, created_at, expires_at, access_count, last_accessed_at, status in rows:
                 share_links.append({
                     "token": token,
                     "fileId": file_id,
+                    "fileName": original_name or "Deleted File",
                     "recipientEmail": recipient_email,
                     "createdAt": created_at,
                     "expiresAt": expires_at,
