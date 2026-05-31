@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { uploadFile, downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLinks } from '../redux/slices/fileSlice';
+import { uploadFile, downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLinks, deleteShareLink } from '../redux/slices/fileSlice';
 import { validateFile } from '../utils/validators';
 
 const FileManager = () => {
@@ -174,6 +174,12 @@ const FileManager = () => {
       await navigator.clipboard.writeText(text);
     } catch (error) {
       console.error('Copy failed', error);
+    }
+  };
+
+  const handleDeleteShare = (token) => {
+    if (window.confirm("Are you sure you want to delete this share link?")) {
+      dispatch(deleteShareLink(token));
     }
   };
 
@@ -653,6 +659,12 @@ const FileManager = () => {
                       className="btn-secondary text-sm"
                     >
                       Copy link
+                    </button>
+                    <button
+                      onClick={() => handleDeleteShare(share.token)}
+                      className="btn-danger text-sm"
+                    >
+                      Delete link
                     </button>
                   </div>
                 </div>

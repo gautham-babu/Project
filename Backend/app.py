@@ -838,6 +838,28 @@ def public_share_download(token):
     except Exception:
         return {"error": "Failed to retrieve shared file."}, 500
 
+@app.route('/share/<token>', methods=['DELETE'])
+@require_auth_token
+def delete_share_link(authenticated_user, token):
+    try:
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT token FROM share_links WHERE token = ? AND owner_email = ?",
+                (token, authenticated_user)
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return {"error": "Share link not found or permission denied."}, 404
+
+            con.execute("DELETE FROM share_links WHERE token = ?", (token,))
+            con.commit()
+
+        return {"message": "Share link deleted successfully."}, 200
+    except Exception:
+        return {"error": "Failed to delete share link."}, 500
+
 @app.errorhandler(413)
 def file_too_large(e):
     return {"error" : "File exceeds the 100MB limit. Please upload a smaller file."}, 413

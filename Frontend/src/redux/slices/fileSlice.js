@@ -130,6 +130,20 @@ export const fetchShareLinks = createAsyncThunk(
   }
 );
 
+export const deleteShareLink = createAsyncThunk(
+  'files/deleteShareLink',
+  async (token, { dispatch, rejectWithValue }) => {
+    try {
+      await apiClient.delete(`/share/${token}`);
+      dispatchSuccess(dispatch, 'Share link deleted successfully!');
+      return { token };
+    } catch (error) {
+      dispatchError(dispatch, error, 'Delete Share Link');
+      return rejectWithValue(error.response?.data?.error || 'Failed to delete share link');
+    }
+  }
+);
+
 const fileSlice = createSlice({
   name: 'files',
   initialState: {
@@ -213,6 +227,17 @@ const fileSlice = createSlice({
         state.shareLinks = action.payload;
       })
       .addCase(fetchShareLinks.rejected, (state) => {
+        state.shareLoading = false;
+      })
+      // Delete Share Link
+      .addCase(deleteShareLink.pending, (state) => {
+        state.shareLoading = true;
+      })
+      .addCase(deleteShareLink.fulfilled, (state, action) => {
+        state.shareLoading = false;
+        state.shareLinks = state.shareLinks.filter(share => share.token !== action.payload.token);
+      })
+      .addCase(deleteShareLink.rejected, (state) => {
         state.shareLoading = false;
       });
   },
