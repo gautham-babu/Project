@@ -114,6 +114,46 @@ export const deleteAccount = createAsyncThunk(
   }
 );
 
+export const forgotPassword = createAsyncThunk(
+  'auth/forgotPassword',
+  async (email, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.post('/api/forgot-password', { email });
+      dispatchSuccess(dispatch, response.data.message || 'Reset link sent successfully!');
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Forgot Password');
+      return rejectWithValue(error.response?.data?.error || 'Failed to request reset link');
+    }
+  }
+);
+
+export const verifyResetToken = createAsyncThunk(
+  'auth/verifyResetToken',
+  async (token, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/api/verify-reset-token/${token}`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.error || 'Invalid or expired reset link');
+    }
+  }
+);
+
+export const resetPassword = createAsyncThunk(
+  'auth/resetPassword',
+  async ({ token, password }, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.post('/api/reset-password', { token, password });
+      dispatchSuccess(dispatch, 'Password reset successfully! Please log in.');
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Reset Password');
+      return rejectWithValue(error.response?.data?.error || 'Password reset failed');
+    }
+  }
+);
+
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
@@ -216,6 +256,36 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
       })
       .addCase(deleteAccount.rejected, (state) => {
+        state.loading = false;
+      })
+      // Forgot Password
+      .addCase(forgotPassword.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(forgotPassword.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(forgotPassword.rejected, (state) => {
+        state.loading = false;
+      })
+      // Reset Password
+      .addCase(resetPassword.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(resetPassword.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(resetPassword.rejected, (state) => {
+        state.loading = false;
+      })
+      // Verify Reset Token
+      .addCase(verifyResetToken.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(verifyResetToken.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(verifyResetToken.rejected, (state) => {
         state.loading = false;
       });
   },

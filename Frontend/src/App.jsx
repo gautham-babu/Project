@@ -12,6 +12,8 @@ import FileManager from './pages/FileManager';
 import SharePreview from './pages/SharePreview';
 import UploadFiles from './pages/UploadFiles';
 import SharedLinks from './pages/SharedLinks';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
@@ -22,6 +24,9 @@ function App() {
             <Route index element={<Navigate to="/login" replace />} />
             <Route path="login" element={<Login />} />
             <Route path="register" element={<Register />} />
+            <Route path="forgot-password" element={<ForgotPassword />} />
+            <Route path="reset-password" element={<ResetPassword />} />
+            <Route path="reset-password/:token" element={<ResetPassword />} />
             <Route
               path="dashboard"
               element={

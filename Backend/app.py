@@ -76,6 +76,13 @@ def init_database():
                 created_at INTEGER NOT NULL
             )
         """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS password_resets(
+                email TEXT PRIMARY KEY,
+                token TEXT NOT NULL UNIQUE,
+                expires_at INTEGER NOT NULL
+            )
+        """)
         cur = con.cursor()
         cur.execute("PRAGMA table_info(users)")
         columns = [column[1] for column in cur.fetchall()]
@@ -503,6 +510,162 @@ def login():
         }
         
     return {"error" : "Wrong email address or password"}, 401
+
+@app.route('/api/forgot-password', methods=['POST'])
+@limiter.limit("5 per minute")
+def forgot_password():
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.image import MIMEImage
+
+    data = request.get_json() or {}
+    email = (data.get('email') or '').strip().lower()
+
+    email_error = validate_email(email)
+    if email_error:
+        return {"error": email_error}, 400
+
+    # Generic success message to prevent user enumeration
+    with sqlite3.connect("database.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT first_name FROM users WHERE email=?", (email,))
+        user_row = cur.fetchone()
+
+    if not user_row:
+        return {"message": "If this email is registered, a password reset link has been sent."}, 200
+
+    first_name = user_row[0]
+    token = uuid.uuid4().hex
+    expires_at = int(time()) + 900 # 15 minutes
+
+    with sqlite3.connect("database.db") as con:
+        con.execute(
+            "INSERT OR REPLACE INTO password_resets(email, token, expires_at) VALUES(?, ?, ?)",
+            (email, token, expires_at)
+        )
+
+    smtp_email = os.getenv('SMTP_EMAIL')
+    smtp_password = os.getenv('SMTP_PASSWORD')
+    frontend_url = os.getenv('FRONTEND_URL') or 'http://localhost:5173'
+    if not smtp_email or not smtp_password:
+        return {"error": "Email service is not configured on the backend env."}, 500
+
+    subject = "Reset Your Password - AirShare"
+    
+    logo_data = None
+    try:
+        logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static/airshare-logo.png'))
+        if os.path.exists(logo_path):
+            with open(logo_path, 'rb') as f:
+                logo_data = f.read()
+    except Exception as e:
+        print(f"Error loading logo: {e}")
+
+    msg = MIMEMultipart('related')
+    msg['Subject'] = subject
+    msg['From'] = smtp_email
+    msg['To'] = email
+
+    msg_alternative = MIMEMultipart('alternative')
+    msg.attach(msg_alternative)
+
+    if logo_data:
+        logo_html = '<img src="cid:logo_img" alt="AirShare" style="max-width: 120px; height: auto; margin-bottom: 15px; display: block;">'
+    else:
+        logo_html = '<h2 style="color: #3b82f6; margin-top: 0;">AirShare</h2>'
+
+    reset_url = f"{frontend_url}/reset-password/{token}"
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+      {logo_html}
+      <h3 style="color: #111827; margin-top: 0;">Reset Your Password</h3>
+      <p>Hello {first_name},</p>
+      <p>We received a request to reset your password. Click the button below to set a new password:</p>
+      <p style="margin: 25px 0;">
+        <a href="{reset_url}" style="display: inline-block; background: #3b82f6; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+          Reset Password
+        </a>
+      </p>
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+      <p style="font-size: 12px; color: #6b7280; margin: 0;">This reset link is valid for 15 minutes. If you did not request a password reset, you can safely ignore this email.</p>
+    </div>
+    """
+    msg_alternative.attach(MIMEText(html_content, 'html'))
+
+    if logo_data:
+        try:
+            mime_img = MIMEImage(logo_data)
+            mime_img.add_header('Content-ID', '<logo_img>')
+            mime_img.add_header('Content-Disposition', 'inline', filename='airshare-logo.png')
+            msg.attach(mime_img)
+        except Exception as e:
+            print(f"Error attaching logo: {e}")
+
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, [email], msg.as_string())
+        return {"message": "If this email is registered, a password reset link has been sent."}, 200
+    except Exception as e:
+        print(f"SMTP Error sending password reset: {e}")
+        return {"error": "Failed to send verification email. Please try again later."}, 500
+
+@app.route('/api/verify-reset-token/<token>', methods=['GET'])
+def verify_reset_token(token):
+    with sqlite3.connect("database.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT email, expires_at FROM password_resets WHERE token=?", (token,))
+        row = cur.fetchone()
+
+        if not row:
+            return {"error": "Invalid or expired reset link."}, 400
+
+        email, expires_at = row
+        if int(time()) > expires_at:
+            con.execute("DELETE FROM password_resets WHERE token=?", (token,))
+            return {"error": "This reset link has expired. Please request a new password reset link."}, 400
+
+    return {"message": "Token is valid"}, 200
+
+@app.route('/api/reset-password', methods=['POST'])
+@limiter.limit("5 per minute")
+def reset_password():
+    data = request.get_json() or {}
+    token = data.get('token')
+    password = data.get('password')
+
+    if not token or not password:
+        return {"error": "Token and password are required"}, 400
+
+    password_error = validate_password(password)
+    if password_error:
+        return {"error": password_error}, 400
+
+    with sqlite3.connect("database.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT email, expires_at FROM password_resets WHERE token=?", (token,))
+        row = cur.fetchone()
+
+        if not row:
+            return {"error": "Invalid or expired reset link."}, 400
+
+        email, expires_at = row
+        if int(time()) > expires_at:
+            con.execute("DELETE FROM password_resets WHERE token=?", (token,))
+            return {"error": "This reset link has expired. Please request a new password reset link."}, 400
+
+        # Check if the new password is the same as the current password
+        cur.execute("SELECT password FROM users WHERE email=?", (email,))
+        user_row = cur.fetchone()
+        if user_row and check_password_hash(user_row[0], password):
+            return {"error": "New password must be different from your current password."}, 400
+
+        hashed_password = generate_password_hash(password)
+        con.execute("UPDATE users SET password=? WHERE email=?", (hashed_password, email))
+        con.execute("DELETE FROM password_resets WHERE email=?", (email,))
+
+    return {"message": "Password reset successfully. You can now log in with your new password."}, 200
 
 #Rate-limited requests 
 @app.errorhandler(429)
