@@ -761,7 +761,7 @@ def public_share_info(token):
             if status != 'active':
                 return {"error": "This share link is no longer active."}, 410
             if expires_at and current_time > expires_at:
-                return {"error": "This share link has expired."}, 410
+                return {"error": "The shared link has expired."}, 410
 
             cur.execute(
                 "SELECT original_name, size FROM file_map WHERE id = ?",
@@ -806,7 +806,7 @@ def public_share_download(token):
             if status != 'active':
                 return {"error": "This share link is no longer active."}, 410
             if expires_at and current_time > expires_at:
-                return {"error": "This share link has expired."}, 410
+                return {"error": "The shared link has expired."}, 410
 
             cur.execute(
                 "SELECT stored_name, original_name FROM file_map WHERE id = ?",
