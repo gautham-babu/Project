@@ -1,4 +1,4 @@
-import sqlite3, jwt, re, os, uuid, json, urllib.request
+import sqlite3, jwt, re, os, uuid, json, urllib.request, magic
 from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from time import time
@@ -163,6 +163,38 @@ def validate_date_of_birth(date_of_birth):
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_of_birth):
         return "Date of birth must be in YYYY-MM-DD format"
     return None
+
+
+def verify_file_content(file_stream, extension):
+    header = file_stream.read(2048)
+    file_stream.seek(0)
+    
+    if not header:
+        return False
+        
+    ext = extension.lower()
+    
+    try:
+        mime = magic.from_buffer(header, mime=True)
+    except Exception:
+        return False
+
+    allowed_mimes = {
+        'pdf': ['application/pdf'],
+        'png': ['image/png'],
+        'jpg': ['image/jpeg', 'image/pjpeg'],
+        'jpeg': ['image/jpeg', 'image/pjpeg'],
+        'docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
+        'mkv': ['video/x-matroska', 'video/mkv'],
+        'mp4': ['video/mp4'],
+        'mov': ['video/quicktime'],
+        'txt': ['text/plain']
+    }
+    
+    mimes = allowed_mimes.get(ext, [])
+    if ext == 'txt':
+        return mime.startswith('text/')
+    return mime in mimes
 
 
 #User management: Fetching, updating password, or deleting users
@@ -404,6 +436,11 @@ def upload_file(authenticated_user):
         try:
             file_id = str(uuid.uuid4())
             extension = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+            
+            if not verify_file_content(file.stream, extension):
+                errors.append(f"{file.filename}: Content does not match extension rules")
+                continue
+
             stored_name = f"{file_id}.{extension}" if extension else file_id
             saved_filename = user_files.save(file, name=stored_name)
             saved_path = os.path.join(upload_dir, saved_filename)
