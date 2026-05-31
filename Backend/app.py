@@ -527,6 +527,7 @@ def delete_file(authenticated_user, file_id):
             os.remove(file_path)
 
         with sqlite3.connect("database.db") as con:
+            con.execute("DELETE FROM share_links WHERE file_id = ?", (file_id,))
             con.execute("DELETE FROM file_map WHERE id = ?", (file_id,))
 
         return {"message" : "File deleted successfully."}, 200

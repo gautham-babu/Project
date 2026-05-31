@@ -31,7 +31,7 @@ const SharePreview = () => {
           }
         }
       } catch (err) {
-        setError(err.response?.data?.error || 'Failed to load shared file.');
+        setError('This share link has expired.');
       } finally {
         setLoading(false);
       }

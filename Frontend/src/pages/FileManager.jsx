@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { downloadFile, deleteFile, fetchUserFiles, createShareLink } from '../redux/slices/fileSlice';
+import { downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLinks } from '../redux/slices/fileSlice';
 
 const FileManager = () => {
-  const { uploadedFiles, loading } = useSelector((state) => state.files);
+  const { uploadedFiles, loading, shareLinks } = useSelector((state) => state.files);
   const dispatch = useDispatch();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,17 +17,27 @@ const FileManager = () => {
 
   useEffect(() => {
     dispatch(fetchUserFiles());
+    dispatch(fetchShareLinks());
   }, [dispatch]);
 
   const handleDownload = (file) => {
     dispatch(downloadFile({ id: file.id, original_name: file.original_name }));
   };
 
-  const handleDelete = async (id) => {
-    const result = await dispatch(deleteFile(id));
-    if (result.type === 'files/deleteFile/fulfilled') {
-      setCurrentPage(1);
-      dispatch(fetchUserFiles());
+  const handleDelete = async (file) => {
+    const isShared = shareLinks && shareLinks.some((link) => link.fileId === file.id);
+    let confirmMsg = "Are you sure you want to delete this file?";
+    if (isShared) {
+      confirmMsg = "This file has been shared. Deleting it will also delete all its shared links. Are you sure you want to proceed?";
+    }
+
+    if (window.confirm(confirmMsg)) {
+      const result = await dispatch(deleteFile(file.id));
+      if (result.type === 'files/deleteFile/fulfilled') {
+        setCurrentPage(1);
+        dispatch(fetchUserFiles());
+        dispatch(fetchShareLinks());
+      }
     }
   };
 
@@ -191,7 +201,7 @@ const FileManager = () => {
                       Share
                     </button>
                     <button
-                      onClick={() => handleDelete(file.id)}
+                      onClick={() => handleDelete(file)}
                       className="btn-danger text-sm px-4 py-2"
                       disabled={loading}
                     >
