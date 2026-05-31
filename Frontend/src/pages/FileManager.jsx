@@ -4,7 +4,7 @@ import { downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLi
 import ConfirmModal from '../components/ConfirmModal';
 
 const FileManager = () => {
-  const { uploadedFiles, loading, shareLinks } = useSelector((state) => state.files);
+  const { uploadedFiles, loading, shareLinks, shareCreating } = useSelector((state) => state.files);
   const dispatch = useDispatch();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -14,6 +14,7 @@ const FileManager = () => {
   const [shareExpiry, setShareExpiry] = useState(24);
   const [shareError, setShareError] = useState(null);
   const [shareResult, setShareResult] = useState(null);
+  const [lastSharedRecipient, setLastSharedRecipient] = useState('');
   const [confirmModal, setConfirmModal] = useState(null); // { file, isShared }
   const itemsPerPage = 5;
 
@@ -53,6 +54,7 @@ const FileManager = () => {
     setShareExpiry(24);
     setShareError(null);
     setShareResult(null);
+    setLastSharedRecipient('');
   };
 
   const closeShareModal = () => {
@@ -61,6 +63,7 @@ const FileManager = () => {
     setShareExpiry(24);
     setShareError(null);
     setShareResult(null);
+    setLastSharedRecipient('');
   };
 
   const handleShareSubmit = async () => {
@@ -71,17 +74,24 @@ const FileManager = () => {
 
     if (!shareModalFile) return;
 
+    setShareError(null);
+    const recipient = shareRecipient.trim();
+
     const result = await dispatch(
       createShareLink({
         fileId: shareModalFile.id,
-        recipientEmail: shareRecipient.trim(),
+        recipientEmail: recipient,
         expiresInHours: shareExpiry,
       })
     );
 
     if (result.type === 'files/createShareLink/fulfilled') {
       setShareResult(result.payload);
+      setLastSharedRecipient(recipient);
+      setShareRecipient('');
       setShareError(null);
+      // Fetch share links again to update the count/badges on UI if needed
+      dispatch(fetchShareLinks());
     } else {
       setShareError(result.payload || 'Unable to create a share link.');
     }
@@ -298,7 +308,7 @@ const FileManager = () => {
       {shareModalFile && (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={closeShareModal}></div>
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={shareCreating ? undefined : closeShareModal}></div>
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
             <div className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-6 pt-6 pb-4 sm:p-8 sm:pb-4">
@@ -309,8 +319,9 @@ const FileManager = () => {
                   </div>
                   <button
                     onClick={closeShareModal}
-                    className="text-gray-400 hover:text-gray-500 p-1"
+                    className="text-gray-400 hover:text-gray-500 p-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Close share modal"
+                    disabled={shareCreating}
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -360,7 +371,7 @@ const FileManager = () => {
                     </div>
                   )}
 
-                  {shareResult && (
+                  {lastSharedRecipient && shareResult && (
                     <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-sm flex items-start gap-3">
                       <div className="flex-shrink-0 mt-0.5">
                         <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -370,7 +381,7 @@ const FileManager = () => {
                       <div>
                         <p className="font-semibold text-green-800">Link sent successfully!</p>
                         <p className="mt-1 text-green-700">
-                          The share link has been sent to <span className="font-medium">{shareRecipient}</span>. They can use it to access the file.
+                          The share link has been sent to <span className="font-medium">{lastSharedRecipient}</span>. You can enter another email address above to share it again.
                         </p>
                       </div>
                     </div>
@@ -380,16 +391,17 @@ const FileManager = () => {
               <div className="bg-gray-50 px-6 py-4 sm:px-8 sm:py-6 flex justify-end space-x-2">
                 <button
                   onClick={closeShareModal}
-                  className="btn-secondary"
+                  className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={shareCreating}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleShareSubmit}
                   className="btn-primary"
-                  disabled={shareResult && !!shareResult.shareUrl}
+                  disabled={shareCreating}
                 >
-                  {shareResult ? 'Shared' : 'Send'}
+                  {shareCreating ? 'Sending...' : 'Send'}
                 </button>
               </div>
             </div>

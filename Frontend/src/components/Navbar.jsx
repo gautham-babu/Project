@@ -38,11 +38,17 @@ const Navbar = () => {
             {/*for Desktop -Hidden on mobile*/}
             {isAuthenticated && (
               <div className="hidden md:flex ml-10 space-x-4">
-                <Link
+                 <Link
                   to="/dashboard"
                   className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   Dashboard
+                </Link>
+                <Link
+                  to="/files"
+                  className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Your Files
                 </Link>
                 <Link
                   to="/upload"
@@ -55,12 +61,6 @@ const Navbar = () => {
                   className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   Shared Links
-                </Link>
-                <Link
-                  to="/files"
-                  className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Your Files
                 </Link>
                 <Link
                   to="/profile"
@@ -120,12 +120,19 @@ const Navbar = () => {
       {isAuthenticated && isMobileMenuOpen && (
         <div className="md:hidden border-t border-gray-200 bg-white">
           <div className="px-2 pt-2 pb-3 space-y-1">
-            <Link
+             <Link
               to="/dashboard"
               className="block text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-base font-medium"
               onClick={closeMobileMenu}
             >
               Dashboard
+            </Link>
+            <Link
+              to="/files"
+              className="block text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-base font-medium"
+              onClick={closeMobileMenu}
+            >
+              Your Files
             </Link>
             <Link
               to="/upload"
@@ -140,13 +147,6 @@ const Navbar = () => {
               onClick={closeMobileMenu}
             >
               Shared Links
-            </Link>
-            <Link
-              to="/files"
-              className="block text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-base font-medium"
-              onClick={closeMobileMenu}
-            >
-              Your Files
             </Link>
             <Link
               to="/profile"
