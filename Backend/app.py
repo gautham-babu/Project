@@ -13,16 +13,40 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
-        "origins": [
-            "http://localhost:5173", "http://127.0.0.1:5173",
-            "http://localhost:5174", "http://127.0.0.1:5174",
-            "http://localhost:5176", "http://127.0.0.1:5176",
-            "http://localhost:5177", "http://127.0.0.1:5177"
-        ],
+        "origins": "*",
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
+
+def get_frontend_url():
+    try:
+        origin = request.headers.get('Origin')
+        if origin and 'localhost' not in origin and '127.0.0.1' not in origin:
+            return origin.rstrip('/')
+        referer = request.headers.get('Referer')
+        if referer and 'localhost' not in referer and '127.0.0.1' not in referer:
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            if parsed.scheme and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
+    except RuntimeError:
+        pass
+        
+    frontend_url = os.getenv('FRONTEND_URL')
+    if not frontend_url or 'localhost' in frontend_url or '127.0.0.1' in frontend_url:
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return f"http://{ip}:5173"
+        except Exception:
+            pass
+            
+    return (frontend_url or 'http://localhost:5173').rstrip('/')
+
 #Fetching the secret key, Set it in your .env file
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['UPLOADED_FILES_DEST'] = 'uploads'
@@ -546,7 +570,7 @@ def forgot_password():
 
     smtp_email = os.getenv('SMTP_EMAIL')
     smtp_password = os.getenv('SMTP_PASSWORD')
-    frontend_url = os.getenv('FRONTEND_URL') or 'http://localhost:5173'
+    frontend_url = get_frontend_url()
     if not smtp_email or not smtp_password:
         return {"error": "Email service is not configured on the backend env."}, 500
 
@@ -990,7 +1014,7 @@ def create_share_link(authenticated_user):
             (token, file_id, authenticated_user, recipient_email, created_at, expires_at)
         )
 
-    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+    frontend_url = get_frontend_url()
     share_url = f"{frontend_url}/share/{token}"
     send_share_email(recipient_email, sender_display_name, share_url, file_name, expires_at)
 
@@ -1023,7 +1047,7 @@ def list_share_links(authenticated_user):
             )
             rows = cur.fetchall()
 
-            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+            frontend_url = get_frontend_url()
             share_links = []
             for token, file_id, original_name, recipient_email, created_at, expires_at, access_count, last_accessed_at, status in rows:
                 share_links.append({
@@ -1201,4 +1225,4 @@ def home():
     return "Flask Backend"
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')
