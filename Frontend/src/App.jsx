@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import FileManager from './pages/FileManager';
 import SharePreview from './pages/SharePreview';
+import UploadFiles from './pages/UploadFiles';
+import SharedLinks from './pages/SharedLinks';
 
 function App() {
   return (
@@ -41,6 +43,22 @@ function App() {
               element={
                 <PrivateRoute>
                   <FileManager />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="upload"
+              element={
+                <PrivateRoute>
+                  <UploadFiles />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="shares"
+              element={
+                <PrivateRoute>
+                  <SharedLinks />
                 </PrivateRoute>
               }
             />

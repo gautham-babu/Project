@@ -1,15 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { uploadFile, downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLinks, deleteShareLink } from '../redux/slices/fileSlice';
-import { validateFile } from '../utils/validators';
+import { downloadFile, deleteFile, fetchUserFiles, createShareLink } from '../redux/slices/fileSlice';
 
 const FileManager = () => {
-  const { uploadedFiles, loading, shareLinks, shareLoading } = useSelector((state) => state.files);
+  const { uploadedFiles, loading } = useSelector((state) => state.files);
   const dispatch = useDispatch();
   
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [dragActive, setDragActive] = useState(false);
-  const [validationError, setValidationError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [shareModalFile, setShareModalFile] = useState(null);
@@ -18,80 +14,10 @@ const FileManager = () => {
   const [shareError, setShareError] = useState(null);
   const [shareResult, setShareResult] = useState(null);
   const itemsPerPage = 5;
-  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // Fetch user's files and existing share links when component mounts
     dispatch(fetchUserFiles());
-    dispatch(fetchShareLinks());
   }, [dispatch]);
-
-  const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files || []);
-    processFiles(files);
-  };
-
-  const processFiles = (files) => {
-    const newFiles = [];
-    const errors = [];
-
-    files.forEach((file) => {
-      const fileErrors = validateFile(file);
-      if (fileErrors.length > 0) {
-        errors.push(`${file.name}: ${fileErrors[0]}`);
-      } else {
-        newFiles.push(file);
-      }
-    });
-
-    if (errors.length > 0) {
-      setValidationError(errors.join('; '));
-    } else {
-      setValidationError(null);
-    }
-
-    setSelectedFiles((prev) => [...prev, ...newFiles]);
-  };
-
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files);
-      processFiles(files);
-    }
-  };
-
-  const handleUpload = async () => {
-    if (selectedFiles.length === 0) return;
-
-    const result = await dispatch(uploadFile(selectedFiles));
-    
-    if (result.type === 'files/uploadFile/fulfilled') {
-      setSelectedFiles([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      // Refresh file list after upload
-      dispatch(fetchUserFiles());
-    }
-  };
-
-  const removeFile = (index) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-  };
 
   const handleDownload = (file) => {
     dispatch(downloadFile({ id: file.id, original_name: file.original_name }));
@@ -100,28 +26,9 @@ const FileManager = () => {
   const handleDelete = async (id) => {
     const result = await dispatch(deleteFile(id));
     if (result.type === 'files/deleteFile/fulfilled') {
-      // Refresh file list after deletion
       setCurrentPage(1);
       dispatch(fetchUserFiles());
     }
-  };
-
-  // Filter files by search query and sort by upload date descending
-  const filteredFiles = uploadedFiles
-    .filter((file) =>
-      file.original_name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .slice()
-    .sort((a, b) => (b.uploaded_at || 0) - (a.uploaded_at || 0));
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredFiles.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedFiles = filteredFiles.slice(startIndex, startIndex + itemsPerPage);
-
-  const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value);
-    setCurrentPage(1); // Reset to first page on search
   };
 
   const validateEmail = (email) => {
@@ -163,7 +70,6 @@ const FileManager = () => {
     if (result.type === 'files/createShareLink/fulfilled') {
       setShareResult(result.payload);
       setShareError(null);
-      dispatch(fetchShareLinks());
     } else {
       setShareError(result.payload || 'Unable to create a share link.');
     }
@@ -177,11 +83,23 @@ const FileManager = () => {
     }
   };
 
-  const handleDeleteShare = (token) => {
-    if (window.confirm("Are you sure you want to delete this share link?")) {
-      dispatch(deleteShareLink(token));
-    }
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
   };
+
+  // Filter files by search query and sort by upload date descending
+  const filteredFiles = uploadedFiles
+    .filter((file) =>
+      file.original_name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .slice()
+    .sort((a, b) => (b.uploaded_at || 0) - (a.uploaded_at || 0));
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredFiles.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedFiles = filteredFiles.slice(startIndex, startIndex + itemsPerPage);
 
   const handlePreviousPage = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 1));
@@ -192,308 +110,101 @@ const FileManager = () => {
   };
 
   const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
+    if (!bytes) return '0 Bytes';
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
   };
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return 'Unknown time';
-    return new Date(timestamp * 1000).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getFileIcon = (filename) => {
-    const ext = filename.split('.').pop().toLowerCase();
-    const iconColors = {
-      pdf: 'text-red-600',
-      png: 'text-blue-600',
-      jpg: 'text-blue-600',
-      jpeg: 'text-blue-600',
-      txt: 'text-gray-600',
-      docx: 'text-blue-700',
-      mp4: 'text-purple-600',
-      mov: 'text-purple-600',
-      mkv: 'text-purple-600',
-    };
-    
-    return iconColors[ext] || 'text-gray-600';
-  };
-
-  const formatDateHeading = (timestamp) => {
-    if (!timestamp) return 'Unknown date';
-
-    const current = new Date();
-    const date = new Date(timestamp * 1000);
-    const diffDays = Math.floor((current.setHours(0, 0, 0, 0) - new Date(date).setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-
-    return date.toLocaleDateString(undefined, {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const groupedFilesByDate = paginatedFiles.reduce((groups, file) => {
-    const heading = formatDateHeading(file.uploaded_at);
-    if (!groups[heading]) groups[heading] = [];
-    groups[heading].push(file);
-    return groups;
-  }, {});
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fadeIn">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">File Manager</h1>
-        <p className="mt-2 text-gray-600">Upload and manage your files</p>
+        <h1 className="text-3xl font-bold text-gray-900">Your Files</h1>
+        <p className="mt-2 text-gray-600">View, download, delete and share your files.</p>
       </div>
 
-      {validationError && (
-        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl text-sm">
-          {validationError}
-        </div>
-      )}
-
-      {/* Upload Section */}
-      <div className="card mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload File</h2>
-        
-        <div
-          className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${
-            dragActive
-              ? 'border-primary-500 bg-primary-50'
-              : 'border-gray-300 hover:border-primary-400'
-          }`}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-        >
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            stroke="currentColor"
-            fill="none"
-            viewBox="0 0 48 48"
-          >
-            <path
-              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <div className="mt-4">
-            <label htmlFor="file-upload" className="cursor-pointer">
-              <span className="btn-primary inline-block">
-                Choose File
-              </span>
-              <input
-                id="file-upload"
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="sr-only"
-                onChange={handleFileSelect}
-                accept=".pdf,.png,.jpg,.jpeg,.txt,.docx,.mp4,.mov,.mkv"
-              />
-            </label>
-            <p className="mt-2 text-sm text-gray-600">or drag and drop</p>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">
-            PDF, PNG, JPG, TXT, DOCX, MP4, MOV, MKV up to 100MB
-          </p>
-        </div>
-
-        {selectedFiles.length > 0 && (
-          <div className="mt-4 space-y-2">
-            <h3 className="text-sm font-medium text-gray-900">Selected files ({selectedFiles.length}):</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {selectedFiles.map((file, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex items-center space-x-2 flex-1 min-w-0">
-                    <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                      <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeFile(index)}
-                    className="ml-2 text-red-600 hover:text-red-700"
-                    title="Remove file"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="flex space-x-2 pt-2">
-              <button
-                onClick={handleUpload}
-                className="btn-primary"
-                disabled={loading}
-              >
-                {loading ? 'Uploading...' : `Upload ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}`}
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedFiles([]);
-                  setValidationError(null);
-                  if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
-                  }
-                }}
-                className="btn-secondary"
-              >
-                Clear All
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Files List */}
+      {/* Files Section */}
       <div className="card">
-        <div className="mb-4 flex items-center space-x-3">
-          <h2 className="text-xl font-semibold text-gray-900 flex-1">Your Files</h2>
-          <div className="flex-1 max-w-md relative">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h2 className="text-xl font-semibold text-gray-900">Files List</h2>
+          <div className="w-full sm:w-72">
             <input
               type="text"
               placeholder="Search files..."
+              className="input-field"
               value={searchQuery}
               onChange={handleSearchChange}
-              className="input-field w-full pr-10"
             />
-            {searchQuery && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setCurrentPage(1);
-                }}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                title="Clear search"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
           </div>
         </div>
-        
-        {filteredFiles.length === 0 && uploadedFiles.length === 0 ? (
-          <div className="text-center py-12">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-              />
-            </svg>
-            <p className="mt-2 text-gray-500">No files uploaded yet</p>
-            <p className="text-sm text-gray-400">Upload your first file to get started</p>
-          </div>
-        ) : filteredFiles.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">No files match your search</p>
+
+        {loading && uploadedFiles.length === 0 ? (
+          <div className="text-gray-500 py-6 text-center">Loading files...</div>
+        ) : paginatedFiles.length === 0 ? (
+          <div className="text-gray-500 py-6 text-center">
+            {searchQuery ? 'No files match your search.' : 'No files uploaded yet.'}
           </div>
         ) : (
-          <>
-            {Object.entries(groupedFilesByDate).map(([heading, files]) => (
-              <div key={heading} className="space-y-4">
-                <div className="px-4 py-2 bg-gray-100 rounded-2xl">
-                  <p className="text-sm font-semibold text-gray-700">{heading}</p>
-                </div>
-                <div className="space-y-3">
-                  {files.map((file, index) => (
-                    <div
-                      key={file.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center space-x-3 flex-1">
-                        <svg
-                          className={`w-8 h-8 ${getFileIcon(file.original_name)}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">
-                            {file.original_name}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {file.uploaded_at ? formatTime(file.uploaded_at) : 'Recently uploaded'}
-                            {file.accessible ? ` • ${formatFileSize(file.size)}` : ' • File not accessible'}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDownload(file)}
-                        className="btn-primary text-sm ml-4"
-                        disabled={loading || !file.accessible}
-                      >
-                        <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Download
-                      </button>
-                      <button
-                        onClick={() => openShareModal(file)}
-                        className="btn-secondary text-sm ml-2"
-                        disabled={loading || !file.accessible}
-                      >
-                        <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8L9 21" />
-                        </svg>
-                        Share
-                      </button>
-                      <button
-                        onClick={() => handleDelete(file.id)}
-                        className="btn-danger text-sm ml-2"
-                        disabled={loading}
-                      >
-                        <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3H4v2h16V7h-3.5z" />
-                        </svg>
-                        Delete
-                      </button>
+          <div className="space-y-4">
+            <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="col-span-5">Name</div>
+              <div className="col-span-2">Size</div>
+              <div className="col-span-2">Uploaded At</div>
+              <div className="col-span-3 text-right">Actions</div>
+            </div>
+
+            <div className="divide-y divide-gray-100">
+              {paginatedFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center px-4 py-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="col-span-12 md:col-span-5 flex items-center space-x-3 min-w-0">
+                    <svg className="w-6 h-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate" title={file.original_name}>
+                        {file.original_name}
+                      </p>
                     </div>
-                  ))}
+                  </div>
+                  <div className="col-span-12 md:col-span-2 text-sm text-gray-600">
+                    {formatFileSize(file.size)}
+                  </div>
+                  <div className="col-span-12 md:col-span-2 text-sm text-gray-600">
+                    {new Date(file.uploaded_at * 1000).toLocaleDateString()}
+                  </div>
+                  <div className="col-span-12 md:col-span-3 flex justify-end gap-2">
+                    <button
+                      onClick={() => handleDownload(file)}
+                      className="btn-primary text-sm px-4 py-2"
+                      disabled={loading || !file.accessible}
+                    >
+                      Download
+                    </button>
+                    <button
+                      onClick={() => openShareModal(file)}
+                      className="btn-secondary text-sm px-4 py-2"
+                      disabled={loading || !file.accessible}
+                    >
+                      Share
+                    </button>
+                    <button
+                      onClick={() => handleDelete(file.id)}
+                      className="btn-danger text-sm px-4 py-2"
+                      disabled={loading}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-between">
+              <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-150">
                 <p className="text-sm text-gray-600">
                   Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredFiles.length)} of {filteredFiles.length} files
                 </p>
@@ -501,106 +212,107 @@ const FileManager = () => {
                   <button
                     onClick={handlePreviousPage}
                     disabled={currentPage === 1}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
-                  <div className="flex items-center space-x-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium ${
-                          currentPage === page
-                            ? 'bg-primary-600 text-white'
-                            : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    ))}
-                  </div>
                   <button
                     onClick={handleNextPage}
                     disabled={currentPage === totalPages}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
+      {/* Share Link Modal */}
       {shareModalFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900">Share file</h3>
-                <p className="mt-1 text-sm text-gray-500">Send a secure share link to a recipient email.</p>
-              </div>
-              <button
-                onClick={closeShareModal}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Close share modal"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-6 space-y-4">
-              <div className="rounded-2xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-600">File</p>
-                <p className="font-medium text-gray-900">{shareModalFile.original_name}</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Recipient email</label>
-                <input
-                  type="email"
-                  value={shareRecipient}
-                  onChange={(e) => setShareRecipient(e.target.value)}
-                  className="input-field mt-2 w-full"
-                  placeholder="recipient@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Link expiration</label>
-                <select
-                  value={shareExpiry}
-                  onChange={(e) => setShareExpiry(Number(e.target.value))}
-                  className="input-field mt-2 w-full"
-                >
-                  <option value={24}>24 hours</option>
-                  <option value={72}>72 hours</option>
-                  <option value={168}>7 days</option>
-                </select>
-              </div>
-
-              {shareError && (
-                <div className="rounded-2xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-                  {shareError}
-                </div>
-              )}
-
-              {shareResult && (
-                <div className="rounded-2xl bg-green-50 border border-green-200 p-4 text-sm text-green-700">
-                  <p className="font-medium">Share link created!</p>
-                  <p className="mt-2 break-all">{shareResult.shareUrl}</p>
+        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={closeShareModal}></div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-6 pt-6 pb-4 sm:p-8 sm:pb-4">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Share file</h3>
+                    <p className="mt-1 text-sm text-gray-500">Send a secure share link to a recipient email.</p>
+                  </div>
                   <button
-                    onClick={() => copyToClipboard(shareResult.shareUrl)}
-                    className="mt-3 btn-secondary"
+                    onClick={closeShareModal}
+                    className="text-gray-400 hover:text-gray-500 p-1"
+                    aria-label="Close share modal"
                   >
-                    Copy link
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
                 </div>
-              )}
 
-              <div className="flex justify-end gap-3 pt-2">
+                <div className="space-y-4">
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <p className="text-xs text-gray-400 font-semibold uppercase">File to Share</p>
+                    <p className="font-medium text-gray-900 mt-1">{shareModalFile.original_name}</p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="recipient" className="block text-sm font-medium text-gray-700 mb-1">
+                      Recipient Email
+                    </label>
+                    <input
+                      id="recipient"
+                      type="email"
+                      placeholder="email@example.com"
+                      className="input-field"
+                      value={shareRecipient}
+                      onChange={(e) => setShareRecipient(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="expiry" className="block text-sm font-medium text-gray-700 mb-1">
+                      Link Expiry (Hours)
+                    </label>
+                    <select
+                      id="expiry"
+                      className="input-field bg-white"
+                      value={shareExpiry}
+                      onChange={(e) => setShareExpiry(Number(e.target.value))}
+                    >
+                      <option value={1}>1 hour</option>
+                      <option value={12}>12 hours</option>
+                      <option value={24}>24 hours (1 day)</option>
+                      <option value={72}>72 hours (3 days)</option>
+                      <option value={168}>168 hours (7 days)</option>
+                    </select>
+                  </div>
+
+                  {shareError && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm font-medium">
+                      {shareError}
+                    </div>
+                  )}
+
+                  {shareResult && (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-sm">
+                      <p className="font-semibold text-green-800">Share link created!</p>
+                      <p className="mt-2 text-green-700 font-mono break-all bg-white p-2 rounded border border-green-100 select-all">{shareResult.shareUrl}</p>
+                      <button
+                        onClick={() => copyToClipboard(shareResult.shareUrl)}
+                        className="mt-2 text-sm font-bold text-primary-600 hover:text-primary-700 flex items-center"
+                      >
+                        Copy to clipboard
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="bg-gray-50 px-6 py-4 sm:px-8 sm:py-6 flex justify-end space-x-2">
                 <button
                   onClick={closeShareModal}
                   className="btn-secondary"
@@ -619,61 +331,6 @@ const FileManager = () => {
           </div>
         </div>
       )}
-
-      {(shareLinks.length > 0 || shareLoading) && (
-        <div className="card mt-8">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">Shared Links</h2>
-          </div>
-
-          {shareLoading ? (
-            <div className="text-gray-500">Loading shared links...</div>
-          ) : shareLinks.length === 0 ? (
-            <div className="text-gray-500">No shared links yet.</div>
-          ) : (
-            <div className="space-y-3">
-              {shareLinks.map((share) => (
-                <div key={share.token} className="rounded-3xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">File ID</p>
-                      <p className="font-medium text-gray-900 truncate">{share.fileId}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Recipient</p>
-                      <p className="font-medium text-gray-900 truncate">{share.recipientEmail}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Accessed</p>
-                      <p className="font-medium text-gray-900">{share.accessCount} times</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Last opened</p>
-                      <p className="font-medium text-gray-900">{share.lastAccessedAt ? new Date(share.lastAccessedAt * 1000).toLocaleString() : 'Not yet'}</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <div className="w-full break-all text-sm text-gray-600">{share.shareUrl}</div>
-                    <button
-                      onClick={() => copyToClipboard(share.shareUrl)}
-                      className="btn-secondary text-sm"
-                    >
-                      Copy link
-                    </button>
-                    <button
-                      onClick={() => handleDeleteShare(share.token)}
-                      className="btn-danger text-sm"
-                    >
-                      Delete link
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
     </div>
   );
 };
