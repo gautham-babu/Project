@@ -51,16 +51,16 @@ const Navbar = () => {
                   Upload Files
                 </Link>
                 <Link
-                  to="/files"
-                  className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Your Files
-                </Link>
-                <Link
                   to="/shares"
                   className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   Shared Links
+                </Link>
+                <Link
+                  to="/files"
+                  className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Your Files
                 </Link>
                 <Link
                   to="/profile"
@@ -135,18 +135,18 @@ const Navbar = () => {
               Upload Files
             </Link>
             <Link
-              to="/files"
-              className="block text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-base font-medium"
-              onClick={closeMobileMenu}
-            >
-              Your Files
-            </Link>
-            <Link
               to="/shares"
               className="block text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-base font-medium"
               onClick={closeMobileMenu}
             >
               Shared Links
+            </Link>
+            <Link
+              to="/files"
+              className="block text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-base font-medium"
+              onClick={closeMobileMenu}
+            >
+              Your Files
             </Link>
             <Link
               to="/profile"

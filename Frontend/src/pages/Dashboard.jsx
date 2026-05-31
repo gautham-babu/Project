@@ -44,23 +44,6 @@ const Dashboard = () => {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Profile Card */}
-        <Link to="/profile" className="card hover:shadow-lg transition-shadow cursor-pointer">
-          <div className="flex items-start space-x-4">
-            <div className="bg-primary-100 p-3 rounded-xl">
-              <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900">Profile</h3>
-              <p className="mt-1 text-sm text-gray-600">
-                Manage your account settings and password
-              </p>
-            </div>
-          </div>
-        </Link>
-
         {/* File Manager Card */}
         <Link to="/files" className="card hover:shadow-lg transition-shadow cursor-pointer">
           <div className="flex items-start space-x-4">
@@ -73,6 +56,23 @@ const Dashboard = () => {
               <h3 className="text-lg font-semibold text-gray-900">Your Files</h3>
               <p className="mt-1 text-sm text-gray-600">
                 View and manage your uploaded files
+              </p>
+            </div>
+          </div>
+        </Link>
+
+        {/* Shared Links Card */}
+        <Link to="/shares" className="card hover:shadow-lg transition-shadow cursor-pointer">
+          <div className="flex items-start space-x-4">
+            <div className="bg-blue-100 p-3 rounded-xl">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900">Shared Links</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                View and manage your active shared file links
               </p>
             </div>
           </div>
