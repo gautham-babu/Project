@@ -1,4 +1,4 @@
-import sqlite3, jwt, re, os, uuid, json, urllib.request, magic
+import sqlite3, jwt, re, os, uuid, json, urllib.request, magic, random, smtplib
 from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from time import time
@@ -67,6 +67,13 @@ def init_database():
                 status TEXT NOT NULL DEFAULT 'active',
                 FOREIGN KEY(file_id) REFERENCES file_map(id),
                 FOREIGN KEY(owner_email) REFERENCES users(email)
+            )
+        """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS signup_otps(
+                email TEXT PRIMARY KEY,
+                otp TEXT NOT NULL,
+                created_at INTEGER NOT NULL
             )
         """)
         cur = con.cursor()
@@ -305,14 +312,107 @@ def manage_user(authenticated_user):
 
         return {"message" : "Account deleted successfully."}
 
+@app.route('/api/send-otp', methods=['POST'])
+@limiter.limit("5 per minute")
+def send_otp():
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.image import MIMEImage
+
+    data = request.get_json() or {}
+    email = (data.get('email') or '').strip().lower()
+
+    email_error = validate_email(email)
+    if email_error:
+        return {"error": email_error}, 400
+
+    # Check if user is already registered
+    with sqlite3.connect("database.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT * FROM users WHERE email=?", (email,))
+        if cur.fetchone():
+            return {"error": "Email address is already registered"}, 409
+
+    # Generate 6-digit OTP
+    otp = f"{random.randint(100000, 999999)}"
+
+    # Store or update in DB
+    with sqlite3.connect("database.db") as con:
+        con.execute(
+            "INSERT OR REPLACE INTO signup_otps(email, otp, created_at) VALUES(?, ?, ?)",
+            (email, otp, int(time()))
+        )
+
+    # Send email
+    smtp_email = os.getenv('SMTP_EMAIL')
+    smtp_password = os.getenv('SMTP_PASSWORD')
+    if not smtp_email or not smtp_password:
+        return {"error": "Email service is not configured on the backend env."}, 500
+
+    subject = "Verify your email address - AirShare"
+
+    # Attempt to load the logo image
+    logo_data = None
+    try:
+        logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static/airshare-logo.png'))
+        if os.path.exists(logo_path):
+            with open(logo_path, 'rb') as f:
+                logo_data = f.read()
+    except Exception as e:
+        print(f"Error loading logo: {e}")
+
+    msg = MIMEMultipart('related')
+    msg['Subject'] = subject
+    msg['From'] = smtp_email
+    msg['To'] = email
+
+    msg_alternative = MIMEMultipart('alternative')
+    msg.attach(msg_alternative)
+
+    if logo_data:
+        logo_html = '<img src="cid:logo_img" alt="AirShare" style="max-width: 120px; height: auto; margin-bottom: 15px; display: block;">'
+    else:
+        logo_html = '<h2 style="color: #3b82f6; margin-top: 0;">AirShare</h2>'
+
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+      {logo_html}
+      <h3 style="color: #111827; margin-top: 0;">Verify Your Email</h3>
+      <p>Thank you for signing up for AirShare! Use the following 6-digit verification code to complete your registration:</p>
+      <p style="background: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #3b82f6; margin: 20px 0;">{otp}</p>
+      <p style="font-size: 13px; color: #6b7280; margin: 0;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+    </div>
+    """
+    msg_alternative.attach(MIMEText(html_content, 'html'))
+
+    # Attach logo image
+    if logo_data:
+        try:
+            mime_img = MIMEImage(logo_data)
+            mime_img.add_header('Content-ID', '<logo_img>')
+            mime_img.add_header('Content-Disposition', 'inline', filename='airshare-logo.png')
+            msg.attach(mime_img)
+        except Exception as e:
+            print(f"Error attaching logo: {e}")
+
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, [email], msg.as_string())
+        return {"message": "OTP sent successfully."}, 200
+    except Exception as e:
+        print(f"SMTP Error sending OTP: {e}")
+        return {"error": "Failed to send verification email. Please try again later."}, 500
+
 #Creates a new user
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
     
-    required_fields = ['firstName', 'lastName', 'email', 'password', 'confirmPassword', 'dateOfBirth']
+    required_fields = ['firstName', 'lastName', 'email', 'password', 'confirmPassword', 'dateOfBirth', 'otp']
     if not data or any(not data.get(field) for field in required_fields):
-        return {"error" : "All registration fields are required"}, 400
+        return {"error" : "All registration fields are required, including email verification code"}, 400
 
     first_name = data.get('firstName').strip()
     last_name = data.get('lastName').strip()
@@ -320,6 +420,7 @@ def register():
     password = data.get('password')
     confirm_password = data.get('confirmPassword')
     date_of_birth = data.get('dateOfBirth').strip()
+    otp_code = data.get('otp').strip()
 
     for field_error in (
         validate_name(first_name, "First name"),
@@ -342,6 +443,19 @@ def register():
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
 
+        # Verify OTP
+        cur.execute("SELECT otp, created_at FROM signup_otps WHERE email = ?", (email,))
+        otp_row = cur.fetchone()
+        if not otp_row:
+            return {"error": "Please request a verification code for this email first."}, 400
+        
+        stored_otp, created_at = otp_row
+        if int(time()) - created_at > 600: # 10 mins expiry
+            return {"error": "The verification code has expired. Please request a new one."}, 400
+            
+        if stored_otp != otp_code:
+            return {"error": "The verification code is incorrect."}, 400
+
         cur.execute("SELECT * FROM users WHERE email=?", (email,))
         existing_user = cur.fetchone()
         if existing_user:
@@ -351,6 +465,9 @@ def register():
             "INSERT INTO users(first_name, last_name, email, password, date_of_birth, created_at) VALUES(?, ?, ?, ?, ?, ?)",
             (first_name, last_name, email, hashed_password, date_of_birth, int(time()))
         )
+        
+        # Delete OTP record after successful registration
+        con.execute("DELETE FROM signup_otps WHERE email = ?", (email,))
 
     return {"message" : "User registered successfully."}, 201
 

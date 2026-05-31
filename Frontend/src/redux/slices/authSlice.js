@@ -20,6 +20,20 @@ export const register = createAsyncThunk(
   }
 );
 
+export const sendOtp = createAsyncThunk(
+  'auth/sendOtp',
+  async (email, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.post('/api/send-otp', { email });
+      dispatchSuccess(dispatch, 'Verification code sent successfully!');
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Send OTP');
+      return rejectWithValue(error.response?.data?.error || 'Failed to send OTP');
+    }
+  }
+);
+
 export const login = createAsyncThunk(
   'auth/login',
   async (credentials, { dispatch, rejectWithValue }) => {
@@ -109,6 +123,7 @@ const authSlice = createSlice({
     token: localStorage.getItem('token') || null,
     isAuthenticated: !!localStorage.getItem('token'),
     loading: false,
+    otpLoading: false,
   },
   reducers: {
     logout: (state) => {
@@ -133,6 +148,16 @@ const authSlice = createSlice({
       })
       .addCase(register.rejected, (state) => {
         state.loading = false;
+      })
+      // Send OTP
+      .addCase(sendOtp.pending, (state) => {
+        state.otpLoading = true;
+      })
+      .addCase(sendOtp.fulfilled, (state) => {
+        state.otpLoading = false;
+      })
+      .addCase(sendOtp.rejected, (state) => {
+        state.otpLoading = false;
       })
       // Login
       .addCase(login.pending, (state) => {

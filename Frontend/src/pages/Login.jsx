@@ -99,7 +99,7 @@ const Login = () => {
                 name="password"
                 type="password"
                 required
-                className="input-field"
+                className="input-field font-normal"
                 placeholder="Enter your password"
                 value={formData.password}
                 onChange={handleChange}
