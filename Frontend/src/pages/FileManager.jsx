@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLinks } from '../redux/slices/fileSlice';
+import ConfirmModal from '../components/ConfirmModal';
 
 const FileManager = () => {
   const { uploadedFiles, loading, shareLinks } = useSelector((state) => state.files);
@@ -10,9 +11,10 @@ const FileManager = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [shareModalFile, setShareModalFile] = useState(null);
   const [shareRecipient, setShareRecipient] = useState('');
-  const [shareExpiry, setShareExpiry] = useState(72);
+  const [shareExpiry, setShareExpiry] = useState(24);
   const [shareError, setShareError] = useState(null);
   const [shareResult, setShareResult] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null); // { file, isShared }
   const itemsPerPage = 5;
 
   useEffect(() => {
@@ -24,20 +26,20 @@ const FileManager = () => {
     dispatch(downloadFile({ id: file.id, original_name: file.original_name }));
   };
 
-  const handleDelete = async (file) => {
+  const handleDelete = (file) => {
     const isShared = shareLinks && shareLinks.some((link) => link.fileId === file.id);
-    let confirmMsg = "Are you sure you want to delete this file?";
-    if (isShared) {
-      confirmMsg = "This file has been shared. Deleting it will also delete all its shared links. Are you sure you want to proceed?";
-    }
+    setConfirmModal({ file, isShared });
+  };
 
-    if (window.confirm(confirmMsg)) {
-      const result = await dispatch(deleteFile(file.id));
-      if (result.type === 'files/deleteFile/fulfilled') {
-        setCurrentPage(1);
-        dispatch(fetchUserFiles());
-        dispatch(fetchShareLinks());
-      }
+  const handleConfirmDelete = async () => {
+    if (!confirmModal) return;
+    const { file } = confirmModal;
+    setConfirmModal(null);
+    const result = await dispatch(deleteFile(file.id));
+    if (result.type === 'files/deleteFile/fulfilled') {
+      setCurrentPage(1);
+      dispatch(fetchUserFiles());
+      dispatch(fetchShareLinks());
     }
   };
 
@@ -48,7 +50,7 @@ const FileManager = () => {
   const openShareModal = (file) => {
     setShareModalFile(file);
     setShareRecipient('');
-    setShareExpiry(72);
+    setShareExpiry(24);
     setShareError(null);
     setShareResult(null);
   };
@@ -56,7 +58,7 @@ const FileManager = () => {
   const closeShareModal = () => {
     setShareModalFile(null);
     setShareRecipient('');
-    setShareExpiry(72);
+    setShareExpiry(24);
     setShareError(null);
     setShareResult(null);
   };
@@ -106,10 +108,46 @@ const FileManager = () => {
     .slice()
     .sort((a, b) => (b.uploaded_at || 0) - (a.uploaded_at || 0));
 
-  // Pagination logic
+  const getFileDate = (timestamp) => {
+    if (!timestamp) return 'Unknown Date';
+    return new Date(timestamp * 1000).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const getFileTime = (timestamp) => {
+    if (!timestamp) return '';
+    return new Date(timestamp * 1000).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  // Group all filtered files by date
+  const fileGroups = [];
+  filteredFiles.forEach((file) => {
+    const dateStr = getFileDate(file.uploaded_at);
+    let group = fileGroups.find((g) => g.date === dateStr);
+    if (!group) {
+      group = { date: dateStr, items: [] };
+      fileGroups.push(group);
+    }
+    group.items.push(file);
+  });
+
+  // Pagination — paginate across all filtered files (not groups)
   const totalPages = Math.ceil(filteredFiles.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedFiles = filteredFiles.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedIds = new Set(paginatedFiles.map((f) => f.id));
+
+  // Keep only groups (and items within) that appear on the current page
+  const paginatedGroups = fileGroups
+    .map((g) => ({ ...g, items: g.items.filter((f) => paginatedIds.has(f.id)) }))
+    .filter((g) => g.items.length > 0);
 
   const handlePreviousPage = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 1));
@@ -155,62 +193,78 @@ const FileManager = () => {
             {searchQuery ? 'No files match your search.' : 'No files uploaded yet.'}
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              <div className="col-span-5">Name</div>
-              <div className="col-span-2">Size</div>
-              <div className="col-span-2">Uploaded At</div>
-              <div className="col-span-3 text-right">Actions</div>
-            </div>
+          <div className="space-y-8">
+            {paginatedGroups.map((group) => (
+              <div key={group.date} className="space-y-4">
+                {/* Date Heading */}
+                <h3 className="text-lg font-bold text-gray-800 border-b border-gray-150 pb-2 mb-3 mt-4">
+                  {group.date}
+                </h3>
 
-            <div className="divide-y divide-gray-100">
-              {paginatedFiles.map((file) => (
-                <div
-                  key={file.id}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center px-4 py-4 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="col-span-12 md:col-span-5 flex items-center space-x-3 min-w-0">
-                    <svg className="w-6 h-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate" title={file.original_name}>
-                        {file.original_name}
-                      </p>
+                <div className="space-y-3">
+                  {group.items.map((file) => (
+                    <div
+                      key={file.id}
+                      className="rounded-2xl border border-gray-150 bg-gray-50/50 p-5 transition-all hover:bg-gray-50"
+                    >
+                      {/* Top row: file info left, time right */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                          {/* File name */}
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <svg className="w-6 h-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <div className="min-w-0">
+                              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-0.5">File Name</p>
+                              <p className="text-sm font-medium text-gray-900 truncate" title={file.original_name}>
+                                {file.original_name}
+                              </p>
+                            </div>
+                          </div>
+                          {/* Size */}
+                          <div>
+                            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Size</p>
+                            <p className="text-sm font-medium text-gray-900">{formatFileSize(file.size)}</p>
+                          </div>
+                        </div>
+
+                        {/* Time Uploaded — right side */}
+                        <div className="text-left sm:text-right sm:min-w-[120px]">
+                          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Time Uploaded</p>
+                          <p className="font-semibold text-gray-800 mt-1">{getFileTime(file.uploaded_at)}</p>
+                        </div>
+                      </div>
+
+                      {/* Bottom row: action buttons */}
+                      <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                        <button
+                          onClick={() => handleDownload(file)}
+                          className="btn-primary text-sm px-4 py-2"
+                          disabled={loading || !file.accessible}
+                        >
+                          Download
+                        </button>
+                        <button
+                          onClick={() => openShareModal(file)}
+                          className="btn-secondary text-sm px-4 py-2"
+                          disabled={loading || !file.accessible}
+                        >
+                          Share
+                        </button>
+                        <button
+                          onClick={() => handleDelete(file)}
+                          className="btn-danger text-sm px-4 py-2"
+                          disabled={loading}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-span-12 md:col-span-2 text-sm text-gray-600">
-                    {formatFileSize(file.size)}
-                  </div>
-                  <div className="col-span-12 md:col-span-2 text-sm text-gray-600">
-                    {new Date(file.uploaded_at * 1000).toLocaleDateString()}
-                  </div>
-                  <div className="col-span-12 md:col-span-3 flex justify-end gap-2">
-                    <button
-                      onClick={() => handleDownload(file)}
-                      className="btn-primary text-sm px-4 py-2"
-                      disabled={loading || !file.accessible}
-                    >
-                      Download
-                    </button>
-                    <button
-                      onClick={() => openShareModal(file)}
-                      className="btn-secondary text-sm px-4 py-2"
-                      disabled={loading || !file.accessible}
-                    >
-                      Share
-                    </button>
-                    <button
-                      onClick={() => handleDelete(file)}
-                      className="btn-danger text-sm px-4 py-2"
-                      disabled={loading}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
@@ -277,7 +331,7 @@ const FileManager = () => {
                     <input
                       id="recipient"
                       type="email"
-                      placeholder="email@example.com"
+                      placeholder="Enter the email address"
                       className="input-field"
                       value={shareRecipient}
                       onChange={(e) => setShareRecipient(e.target.value)}
@@ -286,7 +340,7 @@ const FileManager = () => {
 
                   <div>
                     <label htmlFor="expiry" className="block text-sm font-medium text-gray-700 mb-1">
-                      Link Expiry (Hours)
+                      Link Expiry
                     </label>
                     <select
                       id="expiry"
@@ -295,10 +349,8 @@ const FileManager = () => {
                       onChange={(e) => setShareExpiry(Number(e.target.value))}
                     >
                       <option value={1}>1 hour</option>
-                      <option value={12}>12 hours</option>
-                      <option value={24}>24 hours (1 day)</option>
-                      <option value={72}>72 hours (3 days)</option>
-                      <option value={168}>168 hours (7 days)</option>
+                      <option value={24}>1 day</option>
+                      <option value={168}>7 days</option>
                     </select>
                   </div>
 
@@ -309,15 +361,18 @@ const FileManager = () => {
                   )}
 
                   {shareResult && (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-sm">
-                      <p className="font-semibold text-green-800">Share link created!</p>
-                      <p className="mt-2 text-green-700 font-mono break-all bg-white p-2 rounded border border-green-100 select-all">{shareResult.shareUrl}</p>
-                      <button
-                        onClick={() => copyToClipboard(shareResult.shareUrl)}
-                        className="mt-2 text-sm font-bold text-primary-600 hover:text-primary-700 flex items-center"
-                      >
-                        Copy to clipboard
-                      </button>
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-sm flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-green-800">Link sent successfully!</p>
+                        <p className="mt-1 text-green-700">
+                          The share link has been sent to <span className="font-medium">{shareRecipient}</span>. They can use it to access the file.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -334,13 +389,29 @@ const FileManager = () => {
                   className="btn-primary"
                   disabled={shareResult && !!shareResult.shareUrl}
                 >
-                  {shareResult ? 'Shared' : 'Create share link'}
+                  {shareResult ? 'Shared' : 'Send'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* In-app delete confirmation modal */}
+      <ConfirmModal
+        isOpen={!!confirmModal}
+        title="Delete File"
+        message={
+          confirmModal?.isShared
+            ? 'This file has active shared links. Deleting it will also permanently remove all its shared links. This action cannot be undone.'
+            : 'Are you sure you want to permanently delete this file? This action cannot be undone.'
+        }
+        confirmText="Delete File"
+        cancelText="Cancel"
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmModal(null)}
+      />
     </div>
   );
 };

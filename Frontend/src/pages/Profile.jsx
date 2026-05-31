@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { getUserInfo, updatePassword, deleteAccount } from '../redux/slices/authSlice';
 import { validatePassword, getPasswordStrength } from '../utils/validators';
+import apiClient from '../redux/api/apiClient';
 
 const Profile = () => {
   const { user, profile, loading } = useSelector((state) => state.auth);
@@ -21,6 +22,9 @@ const Profile = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [confirmUsername, setConfirmUsername] = useState('');
   const [currentTime] = useState(() => Date.now());
+  const [currentPasswordVerified, setCurrentPasswordVerified] = useState(false);
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
+  const [verifyError, setVerifyError] = useState(null);
 
   useEffect(() => {
     dispatch(getUserInfo());
@@ -61,6 +65,12 @@ const Profile = () => {
       [name]: value,
     });
 
+    if (name === 'currentPassword') {
+      // Reset verification if user edits the current password
+      setCurrentPasswordVerified(false);
+      setVerifyError(null);
+    }
+
     if (validationErrors[name] || serverError || successMessage) {
       setValidationErrors({
         ...validationErrors,
@@ -72,6 +82,27 @@ const Profile = () => {
 
     if (name === 'newPassword') {
       setPasswordStrength(getPasswordStrength(value));
+    }
+  };
+
+  const handleVerifyCurrentPassword = async () => {
+    if (!passwordData.currentPassword) {
+      setVerifyError('Please enter your current password.');
+      return;
+    }
+    setVerifyingPassword(true);
+    setVerifyError(null);
+    try {
+      await apiClient.post('/api/verify-password', {
+        currentPassword: passwordData.currentPassword,
+      });
+      setCurrentPasswordVerified(true);
+    } catch (err) {
+      setVerifyError(
+        err.response?.data?.error || 'Incorrect password. Please try again.'
+      );
+    } finally {
+      setVerifyingPassword(false);
     }
   };
 
@@ -166,7 +197,9 @@ const Profile = () => {
         {/* Change Password Card */}
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Change Password</h2>
-          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+
+          {/* Step 1: Verify current password */}
+          <div className="space-y-3">
             <div>
               <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
                 Current Password
@@ -175,93 +208,135 @@ const Profile = () => {
                 id="currentPassword"
                 name="currentPassword"
                 type="password"
-                className={`input-field ${validationErrors.currentPassword ? 'border-red-500' : ''}`}
+                className={`input-field ${verifyError ? 'border-red-500' : currentPasswordVerified ? 'border-green-500' : ''}`}
                 placeholder="Enter current password"
                 value={passwordData.currentPassword}
                 onChange={handlePasswordChange}
+                disabled={currentPasswordVerified}
               />
-              {validationErrors.currentPassword && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.currentPassword}</p>
+              {verifyError && (
+                <p className="mt-1 text-sm text-red-600">{verifyError}</p>
+              )}
+              {currentPasswordVerified && (
+                <p className="mt-1 text-sm text-green-600 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Password verified
+                </p>
               )}
             </div>
-            <div>
-              <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                New Password
-              </label>
-              <input
-                id="newPassword"
-                name="newPassword"
-                type="password"
-                className={`input-field ${validationErrors.newPassword ? 'border-red-500' : ''}`}
-                placeholder="Enter new password"
-                value={passwordData.newPassword}
-                onChange={handlePasswordChange}
-              />
-              {passwordStrength && passwordData.newPassword && (
-                <div className="mt-2">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all ${
+
+            {!currentPasswordVerified && (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleVerifyCurrentPassword}
+                disabled={verifyingPassword || !passwordData.currentPassword}
+              >
+                {verifyingPassword ? 'Verifying...' : 'Continue'}
+              </button>
+            )}
+          </div>
+
+          {/* Step 2: Set new password — shown only after verification */}
+          {currentPasswordVerified && (
+            <form onSubmit={handlePasswordSubmit} className="space-y-4 mt-6 animate-fadeIn">
+              <div>
+                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  New Password
+                </label>
+                <input
+                  id="newPassword"
+                  name="newPassword"
+                  type="password"
+                  className={`input-field ${validationErrors.newPassword ? 'border-red-500' : ''}`}
+                  placeholder="Enter new password"
+                  value={passwordData.newPassword}
+                  onChange={handlePasswordChange}
+                />
+                {passwordStrength && passwordData.newPassword && (
+                  <div className="mt-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${
+                            passwordStrength.strength === 'strong'
+                              ? 'bg-green-500 w-full'
+                              : passwordStrength.strength === 'medium'
+                              ? 'bg-yellow-500 w-2/3'
+                              : 'bg-red-500 w-1/3'
+                          }`}
+                        ></div>
+                      </div>
+                      <span
+                        className={`text-xs font-medium ${
                           passwordStrength.strength === 'strong'
-                            ? 'bg-green-500 w-full'
+                            ? 'text-green-600'
                             : passwordStrength.strength === 'medium'
-                            ? 'bg-yellow-500 w-2/3'
-                            : 'bg-red-500 w-1/3'
+                            ? 'text-yellow-600'
+                            : 'text-red-600'
                         }`}
-                      ></div>
+                      >
+                        {passwordStrength.text}
+                      </span>
                     </div>
-                    <span
-                      className={`text-xs font-medium ${
-                        passwordStrength.strength === 'strong'
-                          ? 'text-green-600'
-                          : passwordStrength.strength === 'medium'
-                          ? 'text-yellow-600'
-                          : 'text-red-600'
-                      }`}
-                    >
-                      {passwordStrength.text}
-                    </span>
                   </div>
-                </div>
-              )}
-              {validationErrors.newPassword && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.newPassword}</p>
-              )}
-            </div>
+                )}
+                {validationErrors.newPassword && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.newPassword}</p>
+                )}
+              </div>
 
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm New Password
-              </label>
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                className={`input-field ${validationErrors.confirmPassword ? 'border-red-500' : ''}`}
-                placeholder="Re-enter new password"
-                value={passwordData.confirmPassword}
-                onChange={handlePasswordChange}
-              />
-              {validationErrors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.confirmPassword}</p>
-              )}
-              {serverError && (
-                <p className="mt-1 text-sm text-red-600">{serverError}</p>
-              )}
-              {successMessage && (
-                <p className="mt-1 text-sm text-green-600">{successMessage}</p>
-              )}
-            </div>
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  className={`input-field ${validationErrors.confirmPassword ? 'border-red-500' : ''}`}
+                  placeholder="Re-enter new password"
+                  value={passwordData.confirmPassword}
+                  onChange={handlePasswordChange}
+                />
+                {validationErrors.confirmPassword && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.confirmPassword}</p>
+                )}
+                {serverError && (
+                  <p className="mt-1 text-sm text-red-600">{serverError}</p>
+                )}
+                {successMessage && (
+                  <p className="mt-1 text-sm text-green-600">{successMessage}</p>
+                )}
+              </div>
 
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={loading}
-            >
-              {loading ? 'Updating...' : 'Update Password'}
-            </button>
-          </form>
+              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={loading}
+                >
+                  {loading ? 'Updating...' : 'Update Password'}
+                </button>
+                <button
+                  type="button"
+                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                  onClick={() => {
+                    setCurrentPasswordVerified(false);
+                    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                    setPasswordStrength(null);
+                    setServerError(null);
+                    setSuccessMessage(null);
+                    setValidationErrors({});
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </div>
 
         {/* Delete Account */}

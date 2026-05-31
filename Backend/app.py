@@ -197,6 +197,24 @@ def verify_file_content(file_stream, extension):
     return mime in mimes
 
 
+#Verify current password (step 1 of password change flow)
+@app.route('/api/verify-password', methods=['POST'])
+@require_auth_token
+def verify_password(authenticated_user):
+    data = request.get_json()
+    current_password = data.get('currentPassword')
+    if not current_password:
+        return {"error": "Current password is required."}, 400
+    with sqlite3.connect("database.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT password FROM users WHERE email = ?", (authenticated_user,))
+        row = cur.fetchone()
+        if not row:
+            return {"error": "User not found."}, 404
+        if not check_password_hash(row[0], current_password):
+            return {"error": "Current password is incorrect."}, 401
+    return {"message": "Password verified."}, 200
+
 #User management: Fetching, updating password, or deleting users
 @app.route('/user', methods=['GET', 'PUT', 'DELETE'])
 @require_auth_token

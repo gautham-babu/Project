@@ -1,24 +1,35 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchShareLinks, deleteShareLink } from '../redux/slices/fileSlice';
+import ConfirmModal from '../components/ConfirmModal';
 
 const SharedLinks = () => {
   const { shareLinks, shareLoading } = useSelector((state) => state.files);
   const dispatch = useDispatch();
+
+  const [confirmToken, setConfirmToken] = useState(null); // token of link to delete
+  const [copiedToken, setCopiedToken] = useState(null);
 
   useEffect(() => {
     dispatch(fetchShareLinks());
   }, [dispatch]);
 
   const handleDeleteShare = (token) => {
-    if (window.confirm("Are you sure you want to delete this share link?")) {
-      dispatch(deleteShareLink(token));
-    }
+    setConfirmToken(token); // open modal
   };
 
-  const copyToClipboard = async (text) => {
+  const handleConfirmDelete = () => {
+    if (confirmToken) {
+      dispatch(deleteShareLink(confirmToken));
+    }
+    setConfirmToken(null);
+  };
+
+  const copyToClipboard = async (text, token) => {
     try {
       await navigator.clipboard.writeText(text);
+      setCopiedToken(token);
+      setTimeout(() => setCopiedToken(null), 2000);
     } catch (error) {
       console.error('Copy failed', error);
     }
@@ -105,10 +116,10 @@ const SharedLinks = () => {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => copyToClipboard(share.shareUrl)}
+                            onClick={() => copyToClipboard(share.shareUrl, share.token)}
                             className="btn-secondary text-sm px-4 py-2"
                           >
-                            Copy Link
+                            {copiedToken === share.token ? 'Copied!' : 'Copy Link'}
                           </button>
                           <button
                             onClick={() => handleDeleteShare(share.token)}
@@ -126,6 +137,18 @@ const SharedLinks = () => {
           </div>
         )}
       </div>
+
+      {/* In-app delete confirmation modal */}
+      <ConfirmModal
+        isOpen={!!confirmToken}
+        title="Delete Share Link"
+        message="Are you sure you want to delete this share link? Anyone with the link will lose access immediately."
+        confirmText="Delete Link"
+        cancelText="Cancel"
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmToken(null)}
+      />
     </div>
   );
 };
