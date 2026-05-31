@@ -235,6 +235,52 @@ def verify_file_content(file_stream, extension):
     return mime in mimes
 
 
+def scan_file_virustotal(file_stream):
+    import hashlib
+    import urllib.request
+    import json
+    
+    api_key = os.getenv('VIRUSTOTAL_API_KEY')
+    if not api_key:
+        return True, "VirusTotal API key not configured. Scanning skipped."
+        
+    file_stream.seek(0)
+    file_bytes = file_stream.read()
+    file_stream.seek(0) # Reset stream pointer
+    
+    sha256_hash = hashlib.sha256(file_bytes).hexdigest()
+    
+    url = f"https://www.virustotal.com/api/v3/files/{sha256_hash}"
+    req = urllib.request.Request(url)
+    req.add_header("x-apikey", api_key)
+    
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            result = json.loads(response.read().decode())
+            attributes = result.get("data", {}).get("attributes", {})
+            last_analysis_stats = attributes.get("last_analysis_stats", {})
+            malicious_count = last_analysis_stats.get("malicious", 0)
+            suspicious_count = last_analysis_stats.get("suspicious", 0)
+            
+            if malicious_count > 0 or suspicious_count > 1:
+                return False, f"Flagged as malicious by VirusTotal ({malicious_count} engines flagged it)."
+            return True, "File is clean."
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return True, "File not previously seen by VirusTotal."
+        elif e.code in (401, 403):
+            return True, "VirusTotal API key is invalid. Scanning skipped."
+        elif e.code == 429:
+            return True, "VirusTotal API rate limit reached. Scanning skipped."
+        else:
+            return True, f"VirusTotal returned error code {e.code}. Scanning skipped."
+    except Exception as e:
+        return True, f"VirusTotal connection error: {str(e)}. Scanning skipped."
+
+
+
+
+
 #Verify current password (step 1 of password change flow)
 @app.route('/api/verify-password', methods=['POST'])
 @require_auth_token
@@ -763,6 +809,12 @@ def upload_file(authenticated_user):
                 errors.append(f"{file.filename}: Content does not match extension rules")
                 continue
 
+            # Check file for malware using VirusTotal API
+            is_safe, scan_msg = scan_file_virustotal(file.stream)
+            if not is_safe:
+                errors.append(f"{file.filename}: {scan_msg}")
+                continue
+
             stored_name = f"{file_id}.{extension}" if extension else file_id
             saved_filename = user_files.save(file, name=stored_name)
             saved_path = os.path.join(upload_dir, saved_filename)
@@ -784,6 +836,8 @@ def upload_file(authenticated_user):
             errors.append(f"{file.filename}: Invalid file format")
     
     if not uploaded_files:
+        if errors:
+            return {"error": "; ".join(errors)}, 400
         return {"error" : "Invalid file format. Please upload pdf, png, jpg, jpeg, txt, docx, mp4, mov, or mkv."}, 400
     
     response = {

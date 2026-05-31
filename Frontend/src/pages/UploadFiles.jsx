@@ -8,6 +8,7 @@ const UploadFiles = () => {
   const { loading } = useSelector((state) => state.files);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [uploadError, setUploadError] = useState(null);
 
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [dragActive, setDragActive] = useState(false);
@@ -39,6 +40,7 @@ const UploadFiles = () => {
     }
 
     setSelectedFiles((prev) => [...prev, ...newFiles]);
+    setUploadError(null);
   };
 
   const handleDrag = (e) => {
@@ -65,19 +67,59 @@ const UploadFiles = () => {
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
 
+    setUploadError(null);
     const result = await dispatch(uploadFile(selectedFiles));
     
     if (result.type === 'files/uploadFile/fulfilled') {
-      setSelectedFiles([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      const responseData = result.payload;
+      
+      if (responseData && responseData.warnings && responseData.warnings.length > 0) {
+        // Retrieve names of successfully uploaded files
+        const uploadedNames = (responseData.uploaded_files || []).map(f => f.original_name);
+        
+        // Remove successfully uploaded files from selection, keeping the failed ones
+        setSelectedFiles(prev => prev.filter(file => !uploadedNames.includes(file.name)));
+        
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        
+        // Check for malicious warnings specifically
+        const warningsStr = responseData.warnings.join('; ');
+        if (warningsStr.toLowerCase().includes('malicious') || warningsStr.toLowerCase().includes('virustotal')) {
+          const maliciousFileNames = responseData.warnings
+            .filter(w => w.toLowerCase().includes('malicious') || w.toLowerCase().includes('virustotal'))
+            .map(w => w.split(':')[0].trim());
+            
+          if (maliciousFileNames.length > 0) {
+            setUploadError(`Cannot upload ${maliciousFileNames.join(', ')} as it seems to be malicious.`);
+          } else {
+            setUploadError('Some files were not uploaded as they seem to be malicious.');
+          }
+        } else {
+          setUploadError('Some files failed validation: ' + warningsStr);
+        }
+      } else {
+        // All files uploaded successfully with no warnings
+        setSelectedFiles([]);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        navigate('/files');
       }
-      navigate('/files');
+    } else {
+      const errorMsg = result.payload || result.error?.message || 'File upload failed';
+      if (errorMsg.toLowerCase().includes('malicious') || errorMsg.toLowerCase().includes('virustotal')) {
+        setUploadError('Cannot upload file as it seems to be malicious.');
+      } else {
+        setUploadError(errorMsg);
+      }
     }
   };
 
   const removeFile = (index) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setUploadError(null);
   };
 
   const formatFileSize = (bytes) => {
@@ -106,7 +148,7 @@ const UploadFiles = () => {
             dragActive
               ? 'border-primary-500 bg-primary-50'
               : 'border-gray-300 hover:border-primary-400'
-          }`}
+          } ${loading ? 'pointer-events-none opacity-50' : ''}`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
@@ -121,8 +163,8 @@ const UploadFiles = () => {
             />
           </svg>
           <div className="mt-4">
-            <label htmlFor="file-upload" className="cursor-pointer">
-              <span className="btn-primary inline-block">Choose Files</span>
+             <label htmlFor="file-upload" className={`cursor-pointer ${loading ? 'pointer-events-none opacity-50' : ''}`}>
+              <span className={`btn-primary inline-block ${loading ? 'cursor-not-allowed' : ''}`}>Choose Files</span>
               <input
                 id="file-upload"
                 ref={fileInputRef}
@@ -131,6 +173,7 @@ const UploadFiles = () => {
                 className="sr-only"
                 onChange={handleFileSelect}
                 accept=".pdf,.png,.jpg,.jpeg,.txt,.docx,.mp4,.mov,.mkv"
+                disabled={loading}
               />
             </label>
             <p className="mt-2 text-sm text-gray-600">or drag and drop here</p>
@@ -157,8 +200,9 @@ const UploadFiles = () => {
                   </div>
                   <button
                     onClick={() => removeFile(index)}
-                    className="ml-2 text-red-600 hover:text-red-700"
+                    className="ml-2 text-red-600 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
                     title="Remove file"
+                    disabled={loading}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -167,21 +211,34 @@ const UploadFiles = () => {
                 </div>
               ))}
             </div>
-            <div className="flex space-x-2 pt-2">
-              <button
-                onClick={handleUpload}
-                className="btn-primary"
-                disabled={loading}
-              >
-                {loading ? 'Uploading...' : 'Upload File'}
-              </button>
-              <button
-                onClick={() => setSelectedFiles([])}
-                className="btn-secondary"
-                disabled={loading}
-              >
-                Clear All
-              </button>
+            <div className="flex items-center space-x-4 pt-2">
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleUpload}
+                  className="btn-primary"
+                  disabled={loading}
+                >
+                  {loading ? 'Uploading...' : 'Upload File'}
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedFiles([]);
+                    setUploadError(null);
+                  }}
+                  className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  disabled={loading}
+                >
+                  Clear All
+                </button>
+              </div>
+              {uploadError && !loading && (
+                <span className="text-sm font-semibold text-red-600 animate-fadeIn bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {uploadError}
+                </span>
+              )}
             </div>
           </div>
         )}

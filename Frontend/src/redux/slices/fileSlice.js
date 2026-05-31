@@ -30,7 +30,6 @@ export const uploadFile = createAsyncThunk(
       
       return response.data;
     } catch (error) {
-      dispatchError(dispatch, error, 'File Upload');
       return rejectWithValue(error.response?.data?.error || 'File upload failed');
     }
   }
