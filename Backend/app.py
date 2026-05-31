@@ -82,7 +82,7 @@ init_database()
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["100 per minute", "1000 per hour"],
     storage_uri="memory://",
 )
 

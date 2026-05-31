@@ -19,6 +19,7 @@ const Profile = () => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [passwordStrength, setPasswordStrength] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmUsername, setConfirmUsername] = useState('');
   const [currentTime] = useState(() => Date.now());
 
   useEffect(() => {
@@ -263,36 +264,67 @@ const Profile = () => {
           </form>
         </div>
 
-        {/* Danger Zone */}
-        <div className="card border-2 border-red-200">
-          <h2 className="text-xl font-semibold text-red-600 mb-4">Danger Zone</h2>
-          <p className="text-gray-600 mb-4">
-            Once you delete your account, there is no going back. Please be certain.
+        {/* Delete Account */}
+        <div className="card border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Delete Account</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Permanently delete your account and all associated data, including uploaded files and shared links. This action is irreversible.
           </p>
 
           {!showDeleteConfirm ? (
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="btn-danger"
+              className="px-5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-semibold rounded-xl text-sm transition-all duration-200 shadow-sm"
             >
               Delete Account
             </button>
           ) : (
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-red-600">
-                Are you absolutely sure? This action cannot be undone.
-              </p>
-              <div className="flex space-x-3">
+            <div className="space-y-4 max-w-xl animate-fadeIn">
+              <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start space-x-3">
+                <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div className="text-sm text-red-800">
+                  <p className="font-semibold">Important security confirmation</p>
+                  <p className="mt-1">
+                    You are about to permanently delete your account. All uploaded files and share links will be deleted immediately and cannot be recovered.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="confirmUsername" className="block text-sm font-medium text-gray-700">
+                  To confirm, type your username <span className="font-bold text-gray-900">"{user}"</span> below:
+                </label>
+                <input
+                  id="confirmUsername"
+                  type="text"
+                  className="input-field"
+                  placeholder={user}
+                  value={confirmUsername}
+                  onChange={(e) => setConfirmUsername(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
                 <button
                   onClick={handleDeleteAccount}
-                  className="btn-danger"
-                  disabled={loading}
+                  className={`px-5 py-2.5 font-semibold rounded-xl text-sm transition-all duration-200 shadow-sm ${
+                    confirmUsername === user && !loading
+                      ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                  }`}
+                  disabled={confirmUsername !== user || loading}
                 >
-                  {loading ? 'Deleting...' : 'Yes, Delete My Account'}
+                  {loading ? 'Deleting...' : 'Permanently Delete Account'}
                 </button>
                 <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="btn-secondary"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setConfirmUsername('');
+                  }}
+                  className="px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold rounded-xl text-sm transition-all duration-200 shadow-sm"
                 >
                   Cancel
                 </button>
