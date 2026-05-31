@@ -620,7 +620,7 @@ def send_share_email(recipient_email, sender_name, share_url, file_name, expires
       <p style="background: #f3f4f6; padding: 10px; border-radius: 4px; font-weight: bold; word-break: break-all;">{file_name}</p>
       <p style="margin: 20px 0;"><a href="{share_url}" style="display: inline-block; background: #3b82f6; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">View & Download File</a></p>
       <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="font-size: 12px; color: #666; margin: 0;">This secure link expires on <span style="color: #ef4444; font-weight: bold;">{formatted_expiry}</span>.</p>
+      <p style="font-size: 12px; color: #666; margin: 0;">This link expires on <span style="color: #ef4444; font-weight: bold;">{formatted_expiry}</span>.</p>
     </div>
     """
 
@@ -691,7 +691,8 @@ def create_share_link(authenticated_user):
             (token, file_id, authenticated_user, recipient_email, created_at, expires_at)
         )
 
-    share_url = f"{request.host_url.rstrip('/')}/share/{token}"
+    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+    share_url = f"{frontend_url}/share/{token}"
     send_share_email(recipient_email, sender_display_name, share_url, file_name, expires_at)
 
     return {
@@ -721,6 +722,7 @@ def list_share_links(authenticated_user):
             )
             rows = cur.fetchall()
 
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
             share_links = []
             for token, file_id, recipient_email, created_at, expires_at, access_count, last_accessed_at, status in rows:
                 share_links.append({
@@ -732,12 +734,57 @@ def list_share_links(authenticated_user):
                     "accessCount": access_count,
                     "lastAccessedAt": last_accessed_at,
                     "status": status,
-                    "shareUrl": f"{request.host_url.rstrip('/')}/share/{token}"
+                    "shareUrl": f"{frontend_url}/share/{token}"
                 })
 
         return {"shareLinks": share_links}, 200
     except Exception:
         return {"error": "Failed to retrieve share links."}, 500
+
+@app.route('/share/info/<token>', methods=['GET'])
+def public_share_info(token):
+    try:
+        with sqlite3.connect('database.db') as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT file_id, expires_at, status "
+                "FROM share_links WHERE token = ?",
+                (token,)
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return {"error": "Shared file not found."}, 404
+
+            file_id, expires_at, status = row
+            current_time = int(time())
+            if status != 'active':
+                return {"error": "This share link is no longer active."}, 410
+            if expires_at and current_time > expires_at:
+                return {"error": "This share link has expired."}, 410
+
+            cur.execute(
+                "SELECT original_name, size FROM file_map WHERE id = ?",
+                (file_id,)
+            )
+            file_row = cur.fetchone()
+
+            if not file_row:
+                return {"error": "File not found."}, 404
+
+            original_name, size = file_row
+            ext = os.path.splitext(original_name)[1].lower()
+            if ext.startswith('.'):
+                ext = ext[1:]
+
+        return {
+            "filename": original_name,
+            "size": size,
+            "extension": ext,
+            "expiresAt": expires_at
+        }, 200
+    except Exception:
+        return {"error": "Failed to retrieve share info."}, 500
 
 @app.route('/share/<token>', methods=['GET'])
 def public_share_download(token):
@@ -781,10 +828,11 @@ def public_share_download(token):
             )
             con.commit()
 
+        as_download = request.args.get('download') == '1'
         return send_from_directory(
             app.config['UPLOADED_FILES_DEST'],
             stored_name,
-            as_attachment=True,
+            as_attachment=as_download,
             download_name=original_name
         )
     except Exception:

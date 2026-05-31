@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import FileManager from './pages/FileManager';
+import SharePreview from './pages/SharePreview';
 
 function App() {
   return (
@@ -43,8 +44,9 @@ function App() {
                 </PrivateRoute>
               }
             />
-            <Route path="*" element={<Navigate to="/login" replace />} />
           </Route>
+          <Route path="share/:token" element={<SharePreview />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         
         {/*Toast Notifications*/}
