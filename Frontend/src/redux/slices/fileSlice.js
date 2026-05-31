@@ -98,12 +98,47 @@ export const deleteFile = createAsyncThunk(
   }
 );
 
+export const createShareLink = createAsyncThunk(
+  'files/createShareLink',
+  async ({ fileId, recipientEmail, expiresInHours }, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.post('/share', {
+        fileId,
+        recipientEmail,
+        expiresInHours,
+      });
+
+      dispatchSuccess(dispatch, 'Share link created successfully!');
+      return response.data.share;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Create Share Link');
+      return rejectWithValue(error.response?.data?.error || 'Failed to create share link');
+    }
+  }
+);
+
+export const fetchShareLinks = createAsyncThunk(
+  'files/fetchShareLinks',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.get('/shares');
+      return response.data.shareLinks;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Fetch Share Links');
+      return rejectWithValue(error.response?.data?.error || 'Failed to fetch share links');
+    }
+  }
+);
+
 const fileSlice = createSlice({
   name: 'files',
   initialState: {
     uploadedFiles: [],
     loading: false,
     uploadProgress: 0,
+    shareLinks: [],
+    shareLoading: false,
+    shareCreating: false,
   },
   reducers: {
     setUploadProgress: (state, action) => {
@@ -157,6 +192,28 @@ const fileSlice = createSlice({
       })
       .addCase(deleteFile.rejected, (state) => {
         state.loading = false;
+      })
+      // Create Share Link
+      .addCase(createShareLink.pending, (state) => {
+        state.shareCreating = true;
+      })
+      .addCase(createShareLink.fulfilled, (state, action) => {
+        state.shareCreating = false;
+        state.shareLinks.unshift(action.payload);
+      })
+      .addCase(createShareLink.rejected, (state) => {
+        state.shareCreating = false;
+      })
+      // Fetch Share Links
+      .addCase(fetchShareLinks.pending, (state) => {
+        state.shareLoading = true;
+      })
+      .addCase(fetchShareLinks.fulfilled, (state, action) => {
+        state.shareLoading = false;
+        state.shareLinks = action.payload;
+      })
+      .addCase(fetchShareLinks.rejected, (state) => {
+        state.shareLoading = false;
       });
   },
 });

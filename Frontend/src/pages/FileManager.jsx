@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { uploadFile, downloadFile, deleteFile, fetchUserFiles } from '../redux/slices/fileSlice';
+import { uploadFile, downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLinks } from '../redux/slices/fileSlice';
 import { validateFile } from '../utils/validators';
 
 const FileManager = () => {
-  const { uploadedFiles, loading } = useSelector((state) => state.files);
+  const { uploadedFiles, loading, shareLinks, shareLoading } = useSelector((state) => state.files);
   const dispatch = useDispatch();
   
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -12,12 +12,18 @@ const FileManager = () => {
   const [validationError, setValidationError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [shareModalFile, setShareModalFile] = useState(null);
+  const [shareRecipient, setShareRecipient] = useState('');
+  const [shareExpiry, setShareExpiry] = useState(72);
+  const [shareError, setShareError] = useState(null);
+  const [shareResult, setShareResult] = useState(null);
   const itemsPerPage = 5;
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // Fetch user's files when component mounts
+    // Fetch user's files and existing share links when component mounts
     dispatch(fetchUserFiles());
+    dispatch(fetchShareLinks());
   }, [dispatch]);
 
   const handleFileSelect = (e) => {
@@ -116,6 +122,59 @@ const FileManager = () => {
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
     setCurrentPage(1); // Reset to first page on search
+  };
+
+  const validateEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const openShareModal = (file) => {
+    setShareModalFile(file);
+    setShareRecipient('');
+    setShareExpiry(72);
+    setShareError(null);
+    setShareResult(null);
+  };
+
+  const closeShareModal = () => {
+    setShareModalFile(null);
+    setShareRecipient('');
+    setShareExpiry(72);
+    setShareError(null);
+    setShareResult(null);
+  };
+
+  const handleShareSubmit = async () => {
+    if (!shareRecipient.trim() || !validateEmail(shareRecipient.trim())) {
+      setShareError('Please enter a valid recipient email address.');
+      return;
+    }
+
+    if (!shareModalFile) return;
+
+    const result = await dispatch(
+      createShareLink({
+        fileId: shareModalFile.id,
+        recipientEmail: shareRecipient.trim(),
+        expiresInHours: shareExpiry,
+      })
+    );
+
+    if (result.type === 'files/createShareLink/fulfilled') {
+      setShareResult(result.payload);
+      setShareError(null);
+      dispatch(fetchShareLinks());
+    } else {
+      setShareError(result.payload || 'Unable to create a share link.');
+    }
+  };
+
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      console.error('Copy failed', error);
+    }
   };
 
   const handlePreviousPage = () => {
@@ -401,6 +460,16 @@ const FileManager = () => {
                         Download
                       </button>
                       <button
+                        onClick={() => openShareModal(file)}
+                        className="btn-secondary text-sm ml-2"
+                        disabled={loading || !file.accessible}
+                      >
+                        <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8L9 21" />
+                        </svg>
+                        Share
+                      </button>
+                      <button
                         onClick={() => handleDelete(file.id)}
                         className="btn-danger text-sm ml-2"
                         disabled={loading}
@@ -458,6 +527,141 @@ const FileManager = () => {
           </>
         )}
       </div>
+
+      {shareModalFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Share file</h3>
+                <p className="mt-1 text-sm text-gray-500">Send a secure share link to a recipient email.</p>
+              </div>
+              <button
+                onClick={closeShareModal}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close share modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              <div className="rounded-2xl bg-gray-50 p-4">
+                <p className="text-sm text-gray-600">File</p>
+                <p className="font-medium text-gray-900">{shareModalFile.original_name}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Recipient email</label>
+                <input
+                  type="email"
+                  value={shareRecipient}
+                  onChange={(e) => setShareRecipient(e.target.value)}
+                  className="input-field mt-2 w-full"
+                  placeholder="recipient@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Link expiration</label>
+                <select
+                  value={shareExpiry}
+                  onChange={(e) => setShareExpiry(Number(e.target.value))}
+                  className="input-field mt-2 w-full"
+                >
+                  <option value={24}>24 hours</option>
+                  <option value={72}>72 hours</option>
+                  <option value={168}>7 days</option>
+                </select>
+              </div>
+
+              {shareError && (
+                <div className="rounded-2xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+                  {shareError}
+                </div>
+              )}
+
+              {shareResult && (
+                <div className="rounded-2xl bg-green-50 border border-green-200 p-4 text-sm text-green-700">
+                  <p className="font-medium">Share link created!</p>
+                  <p className="mt-2 break-all">{shareResult.shareUrl}</p>
+                  <button
+                    onClick={() => copyToClipboard(shareResult.shareUrl)}
+                    className="mt-3 btn-secondary"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={closeShareModal}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleShareSubmit}
+                  className="btn-primary"
+                  disabled={shareResult && !!shareResult.shareUrl}
+                >
+                  {shareResult ? 'Shared' : 'Create share link'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(shareLinks.length > 0 || shareLoading) && (
+        <div className="card mt-8">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">Shared Links</h2>
+          </div>
+
+          {shareLoading ? (
+            <div className="text-gray-500">Loading shared links...</div>
+          ) : shareLinks.length === 0 ? (
+            <div className="text-gray-500">No shared links yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {shareLinks.map((share) => (
+                <div key={share.token} className="rounded-3xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">File ID</p>
+                      <p className="font-medium text-gray-900 truncate">{share.fileId}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Recipient</p>
+                      <p className="font-medium text-gray-900 truncate">{share.recipientEmail}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Accessed</p>
+                      <p className="font-medium text-gray-900">{share.accessCount} times</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Last opened</p>
+                      <p className="font-medium text-gray-900">{share.lastAccessedAt ? new Date(share.lastAccessedAt * 1000).toLocaleString() : 'Not yet'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <div className="w-full break-all text-sm text-gray-600">{share.shareUrl}</div>
+                    <button
+                      onClick={() => copyToClipboard(share.shareUrl)}
+                      className="btn-secondary text-sm"
+                    >
+                      Copy link
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 };

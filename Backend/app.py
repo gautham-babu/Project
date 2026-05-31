@@ -1,4 +1,4 @@
-import sqlite3, jwt, re, os, uuid
+import sqlite3, jwt, re, os, uuid, json, urllib.request
 from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from time import time
@@ -51,6 +51,21 @@ def init_database():
                 stored_name TEXT NOT NULL UNIQUE,
                 size INTEGER NOT NULL,
                 uploaded_at INTEGER NOT NULL,
+                FOREIGN KEY(owner_email) REFERENCES users(email)
+            )
+        """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS share_links(
+                token TEXT PRIMARY KEY,
+                file_id TEXT NOT NULL,
+                owner_email TEXT NOT NULL,
+                recipient_email TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                access_count INTEGER NOT NULL DEFAULT 0,
+                last_accessed_at INTEGER,
+                status TEXT NOT NULL DEFAULT 'active',
+                FOREIGN KEY(file_id) REFERENCES file_map(id),
                 FOREIGN KEY(owner_email) REFERENCES users(email)
             )
         """)
@@ -512,6 +527,178 @@ def list_user_files(authenticated_user):
         return {"files": user_files_list}, 200
     except Exception:
         return {"error": "Failed to retrieve files"}, 500
+
+# Share creation helpers
+def send_share_email(recipient_email, sender_name, share_url, file_name, expires_at):
+    resend_api_key = os.getenv('RESEND_API_KEY')
+    sender_address = os.getenv('SENDER_EMAIL')
+    if not resend_api_key or not sender_address:
+        return False
+
+    subject = f"{sender_name} shared a file with you"
+    html_content = f"<p>{sender_name} has shared <strong>{file_name}</strong> with you.</p>"
+    html_content += f"<p><a href=\"{share_url}\">Open shared file</a></p>"
+    html_content += f"<p>Link expires: {expires_at}</p>"
+
+    payload = {
+        "from": sender_address,
+        "to": [recipient_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    request_data = json.dumps(payload).encode('utf-8')
+    request_headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {resend_api_key}'
+    }
+    request_obj = urllib.request.Request(
+        'https://api.resend.com/emails',
+        data=request_data,
+        headers=request_headers,
+        method='POST'
+    )
+
+    try:
+        with urllib.request.urlopen(request_obj, timeout=10) as response:
+            return response.status == 200 or response.status == 202
+    except Exception:
+        return False
+
+@app.route('/share', methods=['POST'])
+@require_auth_token
+def create_share_link(authenticated_user):
+    data = request.get_json() or {}
+    file_id = data.get('fileId') or data.get('file_id')
+    recipient_email = (data.get('recipientEmail') or data.get('recipient_email') or '').strip().lower()
+    expires_in_hours = int(data.get('expiresInHours', 72)) if data.get('expiresInHours') else 72
+
+    if not file_id:
+        return {"error": "File id is required."}, 400
+    email_error = validate_email(recipient_email)
+    if email_error:
+        return {"error": email_error}, 400
+
+    with sqlite3.connect('database.db') as con:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT original_name FROM file_map WHERE id = ? AND owner_email = ?",
+            (file_id, authenticated_user)
+        )
+        row = cur.fetchone()
+
+        if not row:
+            return {"error": "File not found or you do not have permission to share it."}, 404
+
+        file_name = row[0]
+        token = uuid.uuid4().hex
+        created_at = int(time())
+        expires_at = created_at + expires_in_hours * 3600
+
+        con.execute(
+            "INSERT INTO share_links(token, file_id, owner_email, recipient_email, created_at, expires_at) VALUES(?, ?, ?, ?, ?, ?)",
+            (token, file_id, authenticated_user, recipient_email, created_at, expires_at)
+        )
+
+    share_url = f"{request.host_url.rstrip('/')}/share/{token}"
+    sender_name = authenticated_user
+    send_share_email(recipient_email, sender_name, share_url, file_name, expires_at)
+
+    return {
+        "message": "Share link created successfully.",
+        "share": {
+            "token": token,
+            "fileId": file_id,
+            "recipientEmail": recipient_email,
+            "shareUrl": share_url,
+            "expiresAt": expires_at,
+            "createdAt": created_at,
+            "accessCount": 0,
+            "status": "active"
+        }
+    }, 201
+
+@app.route('/shares', methods=['GET'])
+@require_auth_token
+def list_share_links(authenticated_user):
+    try:
+        with sqlite3.connect('database.db') as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT token, file_id, recipient_email, created_at, expires_at, access_count, last_accessed_at, status "
+                "FROM share_links WHERE owner_email = ? ORDER BY created_at DESC",
+                (authenticated_user,)
+            )
+            rows = cur.fetchall()
+
+            share_links = []
+            for token, file_id, recipient_email, created_at, expires_at, access_count, last_accessed_at, status in rows:
+                share_links.append({
+                    "token": token,
+                    "fileId": file_id,
+                    "recipientEmail": recipient_email,
+                    "createdAt": created_at,
+                    "expiresAt": expires_at,
+                    "accessCount": access_count,
+                    "lastAccessedAt": last_accessed_at,
+                    "status": status,
+                    "shareUrl": f"{request.host_url.rstrip('/')}/share/{token}"
+                })
+
+        return {"shareLinks": share_links}, 200
+    except Exception:
+        return {"error": "Failed to retrieve share links."}, 500
+
+@app.route('/share/<token>', methods=['GET'])
+def public_share_download(token):
+    try:
+        with sqlite3.connect('database.db') as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT file_id, recipient_email, expires_at, access_count, last_accessed_at, status "
+                "FROM share_links WHERE token = ?",
+                (token,)
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return {"error": "Shared file not found."}, 404
+
+            file_id, recipient_email, expires_at, access_count, last_accessed_at, status = row
+            current_time = int(time())
+            if status != 'active':
+                return {"error": "This share link is no longer active."}, 410
+            if expires_at and current_time > expires_at:
+                return {"error": "This share link has expired."}, 410
+
+            cur.execute(
+                "SELECT stored_name, original_name FROM file_map WHERE id = ?",
+                (file_id,)
+            )
+            file_row = cur.fetchone()
+
+            if not file_row:
+                return {"error": "File not found."}, 404
+
+            stored_name, original_name = file_row
+            file_path = os.path.join(app.config['UPLOADED_FILES_DEST'], stored_name)
+            if not os.path.exists(file_path):
+                return {"error": "File not accessible."}, 404
+
+            cur.execute(
+                "UPDATE share_links SET access_count = access_count + 1, last_accessed_at = ? WHERE token = ?",
+                (current_time, token)
+            )
+            con.commit()
+
+        return send_from_directory(
+            app.config['UPLOADED_FILES_DEST'],
+            stored_name,
+            as_attachment=True,
+            download_name=original_name
+        )
+    except Exception:
+        return {"error": "Failed to retrieve shared file."}, 500
 
 @app.errorhandler(413)
 def file_too_large(e):
