@@ -2,38 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import apiClient from '../api/apiClient';
 import { dispatchError, dispatchSuccess } from '../../utils/errorHelpers';
 
-// Async thunks for file operations
-export const uploadFile = createAsyncThunk(
-  'files/uploadFile',
-  async (files, { dispatch, rejectWithValue }) => {
-    try {
-      const fileArray = Array.isArray(files) ? files : [files];
-      const formData = new FormData();
-      
-      // Append all files to FormData
-      fileArray.forEach((file) => {
-        formData.append('files', file);
-      });
-
-      const response = await apiClient.post('/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      
-      // Dispatch success notification
-      const count = fileArray.length;
-      dispatchSuccess(
-        dispatch,
-        `${count} file${count !== 1 ? 's' : ''} uploaded successfully!`
-      );
-      
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(error.response?.data?.error || 'File upload failed');
-    }
-  }
-);
+// Async thunks for file operations (uploadFile is defined at the bottom of this file)
 
 export const fetchUserFiles = createAsyncThunk(
   'files/fetchUserFiles',
@@ -143,12 +112,27 @@ export const deleteShareLink = createAsyncThunk(
   }
 );
 
+export const deleteAllFiles = createAsyncThunk(
+  'files/deleteAllFiles',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete('/files/all');
+      dispatchSuccess(dispatch, response.data.message || 'All files deleted successfully!');
+      return response.data;
+    } catch (error) {
+      dispatchError(dispatch, error, 'Delete All Files');
+      return rejectWithValue(error.response?.data?.error || 'Failed to delete all files');
+    }
+  }
+);
+
 const fileSlice = createSlice({
   name: 'files',
   initialState: {
     uploadedFiles: [],
     loading: false,
     uploadProgress: 0,
+    uploadQueue: [],
     shareLinks: [],
     shareLoading: false,
     shareCreating: false,
@@ -159,6 +143,37 @@ const fileSlice = createSlice({
     },
     addUploadedFile: (state, action) => {
       state.uploadedFiles.push(action.payload);
+    },
+    startUpload: (state, action) => {
+      state.uploadQueue.push(action.payload);
+    },
+    updateUploadProgress: (state, action) => {
+      const upload = state.uploadQueue.find(u => u.id === action.payload.id);
+      if (upload) {
+        upload.progress = action.payload.progress;
+      }
+    },
+    finishUpload: (state, action) => {
+      const upload = state.uploadQueue.find(u => u.id === action.payload.id);
+      if (upload) {
+        upload.status = action.payload.status;
+        upload.progress = 100;
+        if (action.payload.error) {
+          upload.error = action.payload.error;
+        }
+        if (action.payload.warnings) {
+          upload.warnings = action.payload.warnings;
+        }
+        if (action.payload.successCount !== undefined) {
+          upload.successCount = action.payload.successCount;
+        }
+      }
+    },
+    dismissUpload: (state, action) => {
+      state.uploadQueue = state.uploadQueue.filter(u => u.id !== action.payload);
+    },
+    clearFinishedUploads: (state) => {
+      state.uploadQueue = state.uploadQueue.filter(u => u.status === 'uploading');
     },
   },
   extraReducers: (builder) => {
@@ -238,9 +253,91 @@ const fileSlice = createSlice({
       })
       .addCase(deleteShareLink.rejected, (state) => {
         state.shareLoading = false;
+      })
+      // Delete All Files
+      .addCase(deleteAllFiles.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteAllFiles.fulfilled, (state) => {
+        state.loading = false;
+        state.uploadedFiles = [];
+        state.shareLinks = [];
+      })
+      .addCase(deleteAllFiles.rejected, (state) => {
+        state.loading = false;
       });
   },
 });
 
-export const { setUploadProgress, addUploadedFile } = fileSlice.actions;
+export const { 
+  setUploadProgress, 
+  addUploadedFile,
+  startUpload,
+  updateUploadProgress,
+  finishUpload,
+  dismissUpload,
+  clearFinishedUploads
+} = fileSlice.actions;
+
+export const uploadFile = createAsyncThunk(
+  'files/uploadFile',
+  async (payload, { dispatch, rejectWithValue }) => {
+    const isObject = payload && !Array.isArray(payload) && payload.files;
+    const files = isObject ? payload.files : payload;
+    const fileArray = Array.isArray(files) ? files : [files];
+    const uploadId = isObject && payload.uploadId ? payload.uploadId : (Date.now().toString() + Math.random().toString(36).substr(2, 9));
+    try {
+      const formData = new FormData();
+      const fileNames = fileArray.map(f => f.name).join(', ');
+      const totalSize = fileArray.reduce((acc, f) => acc + f.size, 0);
+      
+      dispatch(startUpload({
+        id: uploadId,
+        fileName: fileNames,
+        fileCount: fileArray.length,
+        totalSize,
+        progress: 0,
+        status: 'uploading',
+        error: null
+      }));
+      
+      fileArray.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const response = await apiClient.post('/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || totalSize));
+          dispatch(updateUploadProgress({ id: uploadId, progress: percentCompleted }));
+        }
+      });
+      
+      // Dispatch success notification
+      const count = fileArray.length;
+      dispatchSuccess(
+        dispatch,
+        `${count} file${count !== 1 ? 's' : ''} uploaded successfully!`
+      );
+      
+      const hasWarnings = response.data.warnings && response.data.warnings.length > 0;
+      const successCount = (response.data.uploaded_files || []).length;
+      dispatch(finishUpload({
+        id: uploadId,
+        status: hasWarnings ? 'warning' : 'success',
+        warnings: response.data.warnings,
+        successCount,
+      }));
+      
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'File upload failed';
+      dispatch(finishUpload({ id: uploadId, status: 'failed', error: errorMsg }));
+      return rejectWithValue(errorMsg);
+    }
+  }
+);
+
 export default fileSlice.reducer;

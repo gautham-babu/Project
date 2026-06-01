@@ -50,7 +50,7 @@ def get_frontend_url():
 #Fetching the secret key, Set it in your .env file
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['UPLOADED_FILES_DEST'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 100*1024*1024 #100MB limit for uploads
+app.config['MAX_CONTENT_LENGTH'] = 1*1024*1024*1024 # 1 GB maximum account storage limit
 app.config['MAX_STORAGE_PER_USER'] = 1*1024*1024*1024  # 1 GB limit per user
 
 
@@ -802,6 +802,15 @@ def upload_file(authenticated_user):
 
     for file in files_to_upload:
         try:
+            # Check individual file size (must be <= 100MB)
+            file.stream.seek(0, os.SEEK_END)
+            file_size = file.stream.tell()
+            file.stream.seek(0)
+            
+            if file_size > 100 * 1024 * 1024:
+                errors.append(f"{file.filename}: File size exceeds 100MB limit")
+                continue
+
             file_id = str(uuid.uuid4())
             extension = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
             
@@ -909,6 +918,37 @@ def delete_file(authenticated_user, file_id):
         return {"message" : "File deleted successfully."}, 200
     except Exception:
         return {"error" : "Failed to delete file."}, 500
+
+#Delete ALL files for the authenticated user
+@app.route('/files/all', methods=['DELETE'])
+@require_auth_token
+def delete_all_files(authenticated_user):
+    try:
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT id, stored_name FROM file_map WHERE owner_email = ?",
+                (authenticated_user,)
+            )
+            rows = cur.fetchall()
+
+        if not rows:
+            return {"message": "No files to delete.", "deleted": 0}, 200
+
+        deleted_count = 0
+        for file_id, stored_name in rows:
+            file_path = os.path.join(app.config['UPLOADED_FILES_DEST'], stored_name)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            deleted_count += 1
+
+        with sqlite3.connect("database.db") as con:
+            con.execute("DELETE FROM share_links WHERE file_id IN (SELECT id FROM file_map WHERE owner_email = ?)", (authenticated_user,))
+            con.execute("DELETE FROM file_map WHERE owner_email = ?", (authenticated_user,))
+
+        return {"message": f"All {deleted_count} file(s) deleted successfully.", "deleted": deleted_count}, 200
+    except Exception:
+        return {"error": "Failed to delete all files."}, 500
 
 #List user's uploaded files
 @app.route('/files', methods=['GET'])

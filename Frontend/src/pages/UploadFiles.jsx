@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { uploadFile } from '../redux/slices/fileSlice';
@@ -14,6 +14,20 @@ const UploadFiles = () => {
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState(null);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (loading) {
+        e.preventDefault();
+        e.returnValue = 'Upload is in progress. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [loading]);
 
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files || []);

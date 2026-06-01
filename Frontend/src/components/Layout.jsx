@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
+import UploadWidget from './UploadWidget';
 
 const Layout = () => {
   return (
@@ -8,6 +9,7 @@ const Layout = () => {
       <main className="flex-1">
         <Outlet />
       </main>
+      <UploadWidget />
     </div>
   );
 };

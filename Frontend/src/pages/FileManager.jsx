@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { downloadFile, deleteFile, fetchUserFiles, createShareLink, fetchShareLinks } from '../redux/slices/fileSlice';
+import { downloadFile, deleteFile, deleteAllFiles, fetchUserFiles, createShareLink, fetchShareLinks } from '../redux/slices/fileSlice';
 import ConfirmModal from '../components/ConfirmModal';
 
 const FileManager = () => {
@@ -16,6 +16,7 @@ const FileManager = () => {
   const [shareResult, setShareResult] = useState(null);
   const [lastSharedRecipient, setLastSharedRecipient] = useState('');
   const [confirmModal, setConfirmModal] = useState(null); // { file, isShared }
+  const [deleteAllModal, setDeleteAllModal] = useState(false);
   const itemsPerPage = 5;
 
   useEffect(() => {
@@ -41,6 +42,18 @@ const FileManager = () => {
       setCurrentPage(1);
       dispatch(fetchUserFiles());
       dispatch(fetchShareLinks());
+    }
+  };
+
+  const handleDeleteAll = () => {
+    setDeleteAllModal(true);
+  };
+
+  const handleConfirmDeleteAll = async () => {
+    setDeleteAllModal(false);
+    const result = await dispatch(deleteAllFiles());
+    if (result.type === 'files/deleteAllFiles/fulfilled') {
+      setCurrentPage(1);
     }
   };
 
@@ -185,14 +198,25 @@ const FileManager = () => {
       <div className="card">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h2 className="text-xl font-semibold text-gray-900">Files List</h2>
-          <div className="w-full sm:w-72">
-            <input
-              type="text"
-              placeholder="Search files..."
-              className="input-field"
-              value={searchQuery}
-              onChange={handleSearchChange}
-            />
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="flex-1 sm:w-72">
+              <input
+                type="text"
+                placeholder="Search files..."
+                className="input-field"
+                value={searchQuery}
+                onChange={handleSearchChange}
+              />
+            </div>
+            {uploadedFiles.length > 0 && (
+              <button
+                onClick={handleDeleteAll}
+                disabled={loading}
+                className="btn-danger text-sm px-4 py-2 whitespace-nowrap"
+              >
+                Delete All
+              </button>
+            )}
           </div>
         </div>
 
@@ -423,6 +447,18 @@ const FileManager = () => {
         danger
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmModal(null)}
+      />
+
+      {/* Delete All Files confirmation modal */}
+      <ConfirmModal
+        isOpen={deleteAllModal}
+        title="Delete All Files"
+        message="This will permanently delete all your files and remove all their shared links. This action cannot be undone."
+        confirmText="Delete All Files"
+        cancelText="Cancel"
+        danger
+        onConfirm={handleConfirmDeleteAll}
+        onCancel={() => setDeleteAllModal(false)}
       />
     </div>
   );
