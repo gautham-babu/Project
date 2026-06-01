@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../redux/slices/authSlice';
-import { useNotifications } from '../hooks/useNotifications.jsx';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -13,7 +12,8 @@ const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { loading, isAuthenticated } = useSelector((state) => state.auth);
-  const { notifyError } = useNotifications();
+
+  const [loginError, setLoginError] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -27,28 +27,30 @@ const Login = () => {
       ...formData,
       [e.target.name]: e.target.value,
     });
+    if (loginError) {
+      setLoginError(null);
+    }
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     
     // Catch simple form issues before calling the API.
     if (!formData.email.trim()) {
-      notifyError('Email address is required', 'Validation Error');
+      setLoginError('Email address is required');
       return;
     }
     
     if (!formData.password) {
-      notifyError('Password is required', 'Validation Error');
+      setLoginError('Password is required');
       return;
     }
 
+    setLoginError(null);
     try {
       await dispatch(login(formData)).unwrap();
     } catch (error) {
-      notifyError(error, 'Login Failed', {
-        onRetry: () => handleSubmit(e),
-      });
+      setLoginError(error || 'Login failed');
     }
   };
 
@@ -106,6 +108,12 @@ const Login = () => {
                 onChange={handleChange}
               />
             </div>
+
+            {loginError && (
+              <p className="text-sm text-red-600 text-center animate-fadeIn">
+                {loginError}
+              </p>
+            )}
 
             <button
               type="submit"
