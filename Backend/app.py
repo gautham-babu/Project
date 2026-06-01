@@ -35,6 +35,7 @@ CORS(app, resources={
 })
 
 def get_frontend_url():
+    # Prefer the real browser origin when creating shared links.
     try:
         origin = request.headers.get('Origin')
         if origin and 'localhost' not in origin and '127.0.0.1' not in origin:
