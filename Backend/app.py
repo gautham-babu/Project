@@ -1,12 +1,5 @@
-import json
-import os
-import random
-import re
-import smtplib
-import sqlite3
-import urllib.error
-import urllib.request
-import uuid
+import json, os, random, re, smtplib, sqlite3, uuid
+import urllib.request, urllib.error
 from datetime import datetime
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
@@ -15,8 +8,7 @@ from functools import wraps
 from time import sleep, time
 from urllib.parse import urlparse
 
-import jwt
-import magic
+import jwt, magic
 from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
