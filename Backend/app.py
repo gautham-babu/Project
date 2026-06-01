@@ -1,8 +1,23 @@
-import sqlite3, jwt, re, os, uuid, json, urllib.request, magic, random, smtplib
+import json
+import os
+import random
+import re
+import smtplib
+import sqlite3
+import urllib.request
+import uuid
+from datetime import datetime
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from functools import wraps
+from time import time
+from urllib.parse import urlparse
+
+import jwt
+import magic
 from flask import Flask, request, send_from_directory
 from flask_cors import CORS
-from time import time
-from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_uploads import UploadSet, configure_uploads
 from flask_limiter import Limiter
@@ -26,7 +41,6 @@ def get_frontend_url():
             return origin.rstrip('/')
         referer = request.headers.get('Referer')
         if referer and 'localhost' not in referer and '127.0.0.1' not in referer:
-            from urllib.parse import urlparse
             parsed = urlparse(referer)
             if parsed.scheme and parsed.netloc:
                 return f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
@@ -237,8 +251,6 @@ def verify_file_content(file_stream, extension):
 
 def scan_file_virustotal(file_stream):
     import hashlib
-    import urllib.request
-    import json
     
     api_key = os.getenv('VIRUSTOTAL_API_KEY')
     if not api_key:
@@ -392,10 +404,6 @@ def manage_user(authenticated_user):
 @app.route('/api/send-otp', methods=['POST'])
 @limiter.limit("5 per minute")
 def send_otp():
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.image import MIMEImage
-
     data = request.get_json() or {}
     email = (data.get('email') or '').strip().lower()
 
@@ -984,12 +992,6 @@ def list_user_files(authenticated_user):
 
 # Share creation helpers
 def send_share_email(recipient_email, sender_name, share_url, file_name, expires_at):
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.image import MIMEImage
-    from datetime import datetime
-
     smtp_email = os.getenv('SMTP_EMAIL')
     smtp_password = os.getenv('SMTP_PASSWORD')
     if not smtp_email or not smtp_password:

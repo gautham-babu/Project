@@ -159,7 +159,7 @@ const Register = () => {
 
   return (
     <div 
-      className="min-h-screen flex items-start pt-16 py-12 px-4 sm:px-6 lg:px-8"
+      className="min-h-[calc(100vh-4rem)] flex items-start justify-center lg:justify-start pt-8 sm:pt-12 lg:pt-16 py-12 px-4 sm:px-6 lg:px-8"
       style={{
         backgroundImage: 'url(/bg-pattern.png)',
         backgroundSize: 'cover',
@@ -167,7 +167,7 @@ const Register = () => {
         backgroundRepeat: 'no-repeat',
       }}
     >
-      <div className="max-w-md w-full mx-auto lg:mx-0 lg:ml-32 animate-fadeIn">
+      <div className="max-w-md w-full lg:ml-32 animate-fadeIn">
         <div className="card backdrop-blur-sm bg-white/85 shadow-2xl">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-gray-900">Sign Up</h2>
@@ -219,7 +219,7 @@ const Register = () => {
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email Address
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col xs:flex-row gap-2">
                 <input
                   id="email"
                   name="email"
@@ -235,7 +235,7 @@ const Register = () => {
                   type="button"
                   onClick={handleSendOtp}
                   disabled={otpLoading || countdown > 0 || !formData.email}
-                  className="btn-secondary whitespace-nowrap text-sm px-4 py-2 flex items-center justify-center min-w-[110px]"
+                  className="btn-secondary whitespace-nowrap text-sm px-4 py-2 min-w-[110px]"
                 >
                   {otpLoading ? (
                     <svg className="animate-spin h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

@@ -10,7 +10,6 @@ const UploadWidget = () => {
   if (uploadQueue.length === 0) return null;
 
   const activeCount = uploadQueue.filter((u) => u.status === 'uploading').length;
-  const totalCount = uploadQueue.length;
 
   const formatSize = (bytes) => {
     if (!bytes) return '';
@@ -19,7 +18,6 @@ const UploadWidget = () => {
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
   };
 
-  // Extract names of files that failed (from warning strings like "filename: reason")
   const getFailedFileNames = (warnings) => {
     if (!warnings || warnings.length === 0) return [];
     return warnings.map((w) => {
@@ -46,17 +44,15 @@ const UploadWidget = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 w-96 max-w-full bg-white/90 backdrop-blur-md border border-gray-200 rounded-2xl shadow-2xl z-50 overflow-hidden transition-all duration-300 transform animate-fadeIn">
-      {/* Widget Header */}
+    <div className="fixed inset-x-3 bottom-3 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-96 bg-white/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden transition-all duration-300 transform animate-fadeIn">
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-700">
+        <span className="text-sm font-semibold text-gray-700 truncate pr-3">
           {(() => {
             const uploadingItems = uploadQueue.filter((u) => u.status === 'uploading');
             const totalFileCount = uploadingItems.reduce((acc, u) => acc + (u.fileCount || 1), 0);
             if (uploadingItems.length > 0) {
               return `Uploading ${totalFileCount} file${totalFileCount !== 1 ? 's' : ''}...`;
             }
-            // All done — sum actual successfully uploaded file count
             const totalSuccess = uploadQueue.reduce((acc, u) => acc + (u.successCount ?? (u.status === 'success' ? (u.fileCount || 1) : 0)), 0);
             const allFailed = uploadQueue.every((u) => u.status === 'failed');
             if (allFailed) return `Upload failed`;
@@ -64,7 +60,6 @@ const UploadWidget = () => {
           })()}
         </span>
         <div className="flex items-center space-x-2">
-          {/* Minimize / Expand Toggle */}
           <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-200 transition-colors"
@@ -80,7 +75,6 @@ const UploadWidget = () => {
               </svg>
             )}
           </button>
-          {/* Close all if activeCount is 0 */}
           {activeCount === 0 && (
             <button
               onClick={() => {
@@ -97,7 +91,6 @@ const UploadWidget = () => {
         </div>
       </div>
 
-      {/* Widget Body */}
       {!isMinimized && (
         <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 p-2 space-y-2">
           {uploadQueue.map((item) => (
@@ -105,7 +98,6 @@ const UploadWidget = () => {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   {item.status === 'warning' && item.warnings && item.warnings.length > 0 ? (
-                    // Show only the failed file name(s), not the whole batch
                     <>
                       {getFailedFileNames(item.warnings).map((name, i) => (
                         <p key={i} className="text-sm font-medium text-gray-900 truncate" title={name}>
@@ -123,10 +115,9 @@ const UploadWidget = () => {
                   </p>
                 </div>
 
-                {/* Status Icons */}
                 <div className="flex items-center space-x-2 flex-shrink-0">
                   {item.status === 'uploading' && (
-                    <svg className="animate-spin h-5.5 w-5.5 text-primary-500" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
@@ -153,7 +144,6 @@ const UploadWidget = () => {
                     </span>
                   )}
 
-                  {/* Dismiss individual item */}
                   {item.status !== 'uploading' && (
                     <button
                       onClick={() => dispatch(dismissUpload(item.id))}
@@ -167,10 +157,6 @@ const UploadWidget = () => {
                   )}
                 </div>
               </div>
-
-
-
-              {/* Warnings / Error messaging */}
               {item.status === 'warning' && (
                 <p className="text-xs font-medium text-yellow-600">
                   {getCleanWarningMsg(item.warnings)}

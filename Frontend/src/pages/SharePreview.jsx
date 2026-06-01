@@ -24,13 +24,13 @@ const SharePreview = () => {
             setLoadingText(true);
             const textRes = await axios.get(`${API_BASE_URL}/share/${token}`);
             setTextPreview(textRes.data);
-          } catch (err) {
-            console.error('Failed to load text preview', err);
+          } catch {
+            console.error('Failed to load text preview');
           } finally {
             setLoadingText(false);
           }
         }
-      } catch (err) {
+      } catch {
         setError('This share link has expired.');
       } finally {
         setLoading(false);
@@ -90,11 +90,11 @@ const SharePreview = () => {
         {loading ? (
           <div className="text-gray-500 font-medium animate-pulse">Loading preview...</div>
         ) : error ? (
-          <div className="bg-white rounded-2xl shadow-md p-8 w-full text-center">
+          <div className="bg-white rounded-xl shadow-md p-6 sm:p-8 w-full text-center">
             <p className="text-gray-700 font-medium text-lg">{error}</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8 w-full text-center space-y-6">
+          <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8 w-full text-center space-y-6">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 break-all">{fileInfo.filename}</h2>
               <p className="text-sm text-gray-500 mt-1">

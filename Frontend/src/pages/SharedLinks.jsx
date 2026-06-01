@@ -7,7 +7,7 @@ const SharedLinks = () => {
   const { shareLinks, shareLoading } = useSelector((state) => state.files);
   const dispatch = useDispatch();
 
-  const [confirmToken, setConfirmToken] = useState(null); // token of link to delete
+  const [confirmToken, setConfirmToken] = useState(null);
   const [copiedToken, setCopiedToken] = useState(null);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ const SharedLinks = () => {
   }, [dispatch]);
 
   const handleDeleteShare = (token) => {
-    setConfirmToken(token); // open modal
+    setConfirmToken(token);
   };
 
   const handleConfirmDelete = () => {
@@ -35,7 +35,6 @@ const SharedLinks = () => {
     }
   };
 
-  // Sort share links list-wise according to the date they have been shared (descending order)
   const sortedShares = [...shareLinks].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   const getShareDate = (timestamp) => {
@@ -47,7 +46,6 @@ const SharedLinks = () => {
     });
   };
 
-  // Group sorted shares by date, maintaining order
   const shareGroups = [];
   sortedShares.forEach((share) => {
     const dateStr = getShareDate(share.createdAt);
@@ -75,22 +73,20 @@ const SharedLinks = () => {
           <div className="space-y-8">
             {shareGroups.map((group) => (
               <div key={group.date} className="space-y-4">
-                {/* Date Group Heading */}
-                <h3 className="text-lg font-bold text-gray-800 border-b border-gray-150 pb-2 mb-3 mt-4">
+                <h3 className="text-lg font-bold text-gray-800 border-b border-gray-200 pb-2 mb-3 mt-4">
                   {group.date}
                 </h3>
 
                 <div className="space-y-4">
                   {group.items.map((share) => (
-                    <div key={share.token} className="rounded-2xl border border-gray-150 bg-gray-50/50 p-5 transition-all hover:bg-gray-50">
-                      {/* Top Row: File details on left, time shared on right */}
+                    <div key={share.token} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 transition-all hover:bg-gray-50">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">File Name</p>
-                            <p className="font-medium text-gray-900 truncate mt-1 max-w-[200px]" title={share.fileName}>{share.fileName}</p>
+                            <p className="font-medium text-gray-900 truncate mt-1" title={share.fileName}>{share.fileName}</p>
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Recipient</p>
                             <p className="font-medium text-gray-900 truncate mt-1" title={share.recipientEmail}>{share.recipientEmail}</p>
                           </div>
@@ -100,7 +96,6 @@ const SharedLinks = () => {
                           </div>
                         </div>
 
-                        {/* Time Shared in the right of the file */}
                         <div className="text-left sm:text-right sm:min-w-[120px]">
                           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Time Shared</p>
                           <p className="font-semibold text-gray-800 mt-1">
@@ -109,21 +104,20 @@ const SharedLinks = () => {
                         </div>
                       </div>
 
-                      {/* Bottom Row: Copy URL and Actions */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-gray-100">
                         <div className="break-all text-sm text-primary-600 font-mono select-all bg-white px-3 py-1.5 rounded-lg border border-gray-100 flex-1">
                           {share.shareUrl}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:flex">
                           <button
                             onClick={() => copyToClipboard(share.shareUrl, share.token)}
-                            className="btn-secondary text-sm px-4 py-2"
+                            className="btn-secondary text-sm px-4 py-2 w-full sm:w-auto"
                           >
                             {copiedToken === share.token ? 'Copied!' : 'Copy Link'}
                           </button>
                           <button
                             onClick={() => handleDeleteShare(share.token)}
-                            className="btn-danger text-sm px-4 py-2"
+                            className="btn-danger text-sm px-4 py-2 w-full sm:w-auto"
                           >
                             Delete Link
                           </button>
@@ -138,7 +132,6 @@ const SharedLinks = () => {
         )}
       </div>
 
-      {/* In-app delete confirmation modal */}
       <ConfirmModal
         isOpen={!!confirmToken}
         title="Delete Share Link"

@@ -2,8 +2,6 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import apiClient from '../api/apiClient';
 import { dispatchError, dispatchSuccess } from '../../utils/errorHelpers';
 
-// Async thunks for file operations (uploadFile is defined at the bottom of this file)
-
 export const fetchUserFiles = createAsyncThunk(
   'files/fetchUserFiles',
   async (_, { dispatch, rejectWithValue }) => {
@@ -24,23 +22,18 @@ export const downloadFile = createAsyncThunk(
       const response = await apiClient.get(`/download/${id}`, {
         responseType: 'blob',
       });
-      
-      // Create a download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      
-      // Use the original file name for the downloaded file
       link.setAttribute('download', original_name);
-      
+
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
-      // Dispatch success notification
+
       dispatchSuccess(dispatch, `File "${original_name}" downloaded successfully!`);
-      
+
       return { id, message: 'Download started' };
     } catch (error) {
       dispatchError(dispatch, error, 'File Download');
@@ -54,10 +47,8 @@ export const deleteFile = createAsyncThunk(
   async (id, { dispatch, rejectWithValue }) => {
     try {
       await apiClient.delete(`/delete/${id}`);
-      
-      // Dispatch success notification
       dispatchSuccess(dispatch, `File deleted successfully!`);
-      
+
       return { id, message: 'File deleted' };
     } catch (error) {
       dispatchError(dispatch, error, 'File Delete');
@@ -131,19 +122,12 @@ const fileSlice = createSlice({
   initialState: {
     uploadedFiles: [],
     loading: false,
-    uploadProgress: 0,
     uploadQueue: [],
     shareLinks: [],
     shareLoading: false,
     shareCreating: false,
   },
   reducers: {
-    setUploadProgress: (state, action) => {
-      state.uploadProgress = action.payload;
-    },
-    addUploadedFile: (state, action) => {
-      state.uploadedFiles.push(action.payload);
-    },
     startUpload: (state, action) => {
       state.uploadQueue.push(action.payload);
     },
@@ -172,9 +156,6 @@ const fileSlice = createSlice({
     dismissUpload: (state, action) => {
       state.uploadQueue = state.uploadQueue.filter(u => u.id !== action.payload);
     },
-    clearFinishedUploads: (state) => {
-      state.uploadQueue = state.uploadQueue.filter(u => u.status === 'uploading');
-    },
   },
   extraReducers: (builder) => {
     builder
@@ -184,11 +165,9 @@ const fileSlice = createSlice({
       })
       .addCase(uploadFile.fulfilled, (state) => {
         state.loading = false;
-        state.uploadProgress = 0;
       })
       .addCase(uploadFile.rejected, (state) => {
         state.loading = false;
-        state.uploadProgress = 0;
       })
       // Fetch User Files
       .addCase(fetchUserFiles.pending, (state) => {
@@ -270,13 +249,10 @@ const fileSlice = createSlice({
 });
 
 export const { 
-  setUploadProgress, 
-  addUploadedFile,
   startUpload,
   updateUploadProgress,
   finishUpload,
-  dismissUpload,
-  clearFinishedUploads
+  dismissUpload
 } = fileSlice.actions;
 
 export const uploadFile = createAsyncThunk(
@@ -290,7 +266,6 @@ export const uploadFile = createAsyncThunk(
       const formData = new FormData();
       const fileNames = fileArray.map(f => f.name).join(', ');
       const totalSize = fileArray.reduce((acc, f) => acc + f.size, 0);
-      
       dispatch(startUpload({
         id: uploadId,
         fileName: fileNames,
@@ -314,8 +289,6 @@ export const uploadFile = createAsyncThunk(
           dispatch(updateUploadProgress({ id: uploadId, progress: percentCompleted }));
         }
       });
-      
-      // Dispatch success notification
       const count = fileArray.length;
       dispatchSuccess(
         dispatch,

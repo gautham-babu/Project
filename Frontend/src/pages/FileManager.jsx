@@ -15,7 +15,7 @@ const FileManager = () => {
   const [shareError, setShareError] = useState(null);
   const [shareResult, setShareResult] = useState(null);
   const [lastSharedRecipient, setLastSharedRecipient] = useState('');
-  const [confirmModal, setConfirmModal] = useState(null); // { file, isShared }
+  const [confirmModal, setConfirmModal] = useState(null);
   const [deleteAllModal, setDeleteAllModal] = useState(false);
   const itemsPerPage = 5;
 
@@ -103,18 +103,9 @@ const FileManager = () => {
       setLastSharedRecipient(recipient);
       setShareRecipient('');
       setShareError(null);
-      // Fetch share links again to update the count/badges on UI if needed
       dispatch(fetchShareLinks());
     } else {
       setShareError(result.payload || 'Unable to create a share link.');
-    }
-  };
-
-  const copyToClipboard = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (error) {
-      console.error('Copy failed', error);
     }
   };
 
@@ -123,7 +114,6 @@ const FileManager = () => {
     setCurrentPage(1);
   };
 
-  // Filter files by search query and sort by upload date descending
   const filteredFiles = uploadedFiles
     .filter((file) =>
       file.original_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -149,7 +139,6 @@ const FileManager = () => {
     });
   };
 
-  // Group all filtered files by date
   const fileGroups = [];
   filteredFiles.forEach((file) => {
     const dateStr = getFileDate(file.uploaded_at);
@@ -161,13 +150,11 @@ const FileManager = () => {
     group.items.push(file);
   });
 
-  // Pagination — paginate across all filtered files (not groups)
   const totalPages = Math.ceil(filteredFiles.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedFiles = filteredFiles.slice(startIndex, startIndex + itemsPerPage);
   const paginatedIds = new Set(paginatedFiles.map((f) => f.id));
 
-  // Keep only groups (and items within) that appear on the current page
   const paginatedGroups = fileGroups
     .map((g) => ({ ...g, items: g.items.filter((f) => paginatedIds.has(f.id)) }))
     .filter((g) => g.items.length > 0);
@@ -194,12 +181,11 @@ const FileManager = () => {
         <p className="mt-2 text-gray-600">View, download, delete and share your files.</p>
       </div>
 
-      {/* Files Section */}
       <div className="card">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h2 className="text-xl font-semibold text-gray-900">Files List</h2>
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="flex-1 sm:w-72">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <div className="w-full sm:w-72">
               <input
                 type="text"
                 placeholder="Search files..."
@@ -212,7 +198,7 @@ const FileManager = () => {
               <button
                 onClick={handleDeleteAll}
                 disabled={loading}
-                className="btn-danger text-sm px-4 py-2 whitespace-nowrap"
+                className="btn-danger text-sm px-4 py-2 whitespace-nowrap w-full sm:w-auto"
               >
                 Delete All
               </button>
@@ -230,8 +216,7 @@ const FileManager = () => {
           <div className="space-y-8">
             {paginatedGroups.map((group) => (
               <div key={group.date} className="space-y-4">
-                {/* Date Heading */}
-                <h3 className="text-lg font-bold text-gray-800 border-b border-gray-150 pb-2 mb-3 mt-4">
+                <h3 className="text-lg font-bold text-gray-800 border-b border-gray-200 pb-2 mb-3 mt-4">
                   {group.date}
                 </h3>
 
@@ -239,12 +224,10 @@ const FileManager = () => {
                   {group.items.map((file) => (
                     <div
                       key={file.id}
-                      className="rounded-2xl border border-gray-150 bg-gray-50/50 p-5 transition-all hover:bg-gray-50"
+                      className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 transition-all hover:bg-gray-50"
                     >
-                      {/* Top row: file info left, time right */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-                          {/* File name */}
                           <div className="flex items-center space-x-3 min-w-0">
                             <svg className="w-6 h-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -256,39 +239,36 @@ const FileManager = () => {
                               </p>
                             </div>
                           </div>
-                          {/* Size */}
                           <div>
                             <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Size</p>
                             <p className="text-sm font-medium text-gray-900">{formatFileSize(file.size)}</p>
                           </div>
                         </div>
 
-                        {/* Time Uploaded — right side */}
                         <div className="text-left sm:text-right sm:min-w-[120px]">
                           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Time Uploaded</p>
                           <p className="font-semibold text-gray-800 mt-1">{getFileTime(file.uploaded_at)}</p>
                         </div>
                       </div>
 
-                      {/* Bottom row: action buttons */}
-                      <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                      <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 pt-3 border-t border-gray-100 sm:flex sm:justify-end">
                         <button
                           onClick={() => handleDownload(file)}
-                          className="btn-primary text-sm px-4 py-2"
+                          className="btn-primary text-sm px-4 py-2 w-full sm:w-auto"
                           disabled={loading || !file.accessible}
                         >
                           Download
                         </button>
                         <button
                           onClick={() => openShareModal(file)}
-                          className="btn-secondary text-sm px-4 py-2"
+                          className="btn-secondary text-sm px-4 py-2 w-full sm:w-auto"
                           disabled={loading || !file.accessible}
                         >
                           Share
                         </button>
                         <button
                           onClick={() => handleDelete(file)}
-                          className="btn-danger text-sm px-4 py-2"
+                          className="btn-danger text-sm px-4 py-2 w-full sm:w-auto"
                           disabled={loading}
                         >
                           Delete
@@ -300,13 +280,12 @@ const FileManager = () => {
               </div>
             ))}
 
-            {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-150">
+              <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-gray-200">
                 <p className="text-sm text-gray-600">
                   Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredFiles.length)} of {filteredFiles.length} files
                 </p>
-                <div className="flex items-center space-x-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
                   <button
                     onClick={handlePreviousPage}
                     disabled={currentPage === 1}
@@ -334,7 +313,7 @@ const FileManager = () => {
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={shareCreating ? undefined : closeShareModal}></div>
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div className="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-6 pt-6 pb-4 sm:p-8 sm:pb-4">
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -354,9 +333,9 @@ const FileManager = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="p-3 bg-gray-50 rounded-xl">
+                  <div className="p-3 bg-gray-50 rounded-xl min-w-0">
                     <p className="text-xs text-gray-400 font-semibold uppercase">File to Share</p>
-                    <p className="font-medium text-gray-900 mt-1">{shareModalFile.original_name}</p>
+                    <p className="font-medium text-gray-900 mt-1 break-words">{shareModalFile.original_name}</p>
                   </div>
 
                   <div>
@@ -412,7 +391,7 @@ const FileManager = () => {
                   )}
                 </div>
               </div>
-              <div className="bg-gray-50 px-6 py-4 sm:px-8 sm:py-6 flex justify-end space-x-2">
+              <div className="bg-gray-50 px-6 py-4 sm:px-8 sm:py-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
                 <button
                   onClick={closeShareModal}
                   className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
@@ -433,7 +412,6 @@ const FileManager = () => {
         </div>
       )}
 
-      {/* In-app delete confirmation modal */}
       <ConfirmModal
         isOpen={!!confirmModal}
         title="Delete File"
@@ -449,7 +427,6 @@ const FileManager = () => {
         onCancel={() => setConfirmModal(null)}
       />
 
-      {/* Delete All Files confirmation modal */}
       <ConfirmModal
         isOpen={deleteAllModal}
         title="Delete All Files"

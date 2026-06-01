@@ -13,14 +13,13 @@ const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { loading, isAuthenticated } = useSelector((state) => state.auth);
-  const { notifySuccess, notifyError, notifyLoading, dismissNotification } = useNotifications();
+  const { notifyError } = useNotifications();
 
   useEffect(() => {
     if (isAuthenticated) {
-      notifySuccess('Welcome back! Login successful.');
       navigate('/dashboard');
     }
-  }, [isAuthenticated, navigate, notifySuccess]);
+  }, [isAuthenticated, navigate]);
 
   const handleChange = (e) => {
     setFormData({
@@ -43,13 +42,9 @@ const Login = () => {
       return;
     }
 
-    const loadingToast = notifyLoading('Signing you in...');
-    
     try {
       await dispatch(login(formData)).unwrap();
-      dismissNotification(loadingToast);
     } catch (error) {
-      dismissNotification(loadingToast);
       notifyError(error, 'Login Failed', {
         onRetry: () => handleSubmit(e),
       });
@@ -58,7 +53,7 @@ const Login = () => {
 
   return (
     <div 
-      className="min-h-screen flex items-start pt-32 py-12 px-4 sm:px-6 lg:px-8"
+      className="min-h-[calc(100vh-4rem)] flex items-start justify-center lg:justify-start pt-12 sm:pt-20 lg:pt-32 py-12 px-4 sm:px-6 lg:px-8"
       style={{
         backgroundImage: 'url(/bg-pattern.png)',
         backgroundSize: 'cover',
@@ -66,7 +61,7 @@ const Login = () => {
         backgroundRepeat: 'no-repeat',
       }}
     >
-      <div className="max-w-sm w-full mx-auto lg:mx-0 lg:ml-32 animate-fadeIn">
+      <div className="max-w-sm w-full lg:ml-32 animate-fadeIn">
         <div className="card backdrop-blur-sm bg-white/85 shadow-2xl">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-gray-900">Sign In</h2>

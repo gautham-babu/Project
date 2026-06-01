@@ -39,7 +39,7 @@ const ForgotPassword = () => {
 
   return (
     <div 
-      className="min-h-screen flex items-start pt-32 py-12 px-4 sm:px-6 lg:px-8"
+      className="min-h-[calc(100vh-4rem)] flex items-start justify-center lg:justify-start pt-12 sm:pt-20 lg:pt-32 py-12 px-4 sm:px-6 lg:px-8"
       style={{
         backgroundImage: 'url(/bg-pattern.png)',
         backgroundSize: 'cover',
@@ -47,7 +47,7 @@ const ForgotPassword = () => {
         backgroundRepeat: 'no-repeat',
       }}
     >
-      <div className="max-w-sm w-full mx-auto lg:mx-0 lg:ml-32 animate-fadeIn">
+      <div className="max-w-sm w-full lg:ml-32 animate-fadeIn">
         <div className="card backdrop-blur-sm bg-white/85 shadow-2xl">
           <div className="text-center mb-6">
             <h2 className="text-3xl font-bold text-gray-900">Forgot Password</h2>

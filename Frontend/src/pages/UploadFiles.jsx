@@ -158,7 +158,7 @@ const UploadFiles = () => {
 
       <div className="card">
         <div
-          className={`border-2 border-dashed rounded-2xl p-12 text-center transition-colors ${
+          className={`border-2 border-dashed rounded-xl p-6 sm:p-12 text-center transition-colors ${
             dragActive
               ? 'border-primary-500 bg-primary-50'
               : 'border-gray-300 hover:border-primary-400'
@@ -225,11 +225,11 @@ const UploadFiles = () => {
                 </div>
               ))}
             </div>
-            <div className="flex items-center space-x-4 pt-2">
-              <div className="flex space-x-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex">
                 <button
                   onClick={handleUpload}
-                  className="btn-primary"
+                  className="btn-primary w-full sm:w-auto"
                   disabled={loading}
                 >
                   {loading ? 'Uploading...' : 'Upload File'}
@@ -239,18 +239,18 @@ const UploadFiles = () => {
                     setSelectedFiles([]);
                     setUploadError(null);
                   }}
-                  className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  className="btn-secondary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                   disabled={loading}
                 >
                   Clear All
                 </button>
               </div>
               {uploadError && !loading && (
-                <span className="text-sm font-semibold text-red-600 animate-fadeIn bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-red-600 animate-fadeIn bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 flex items-start gap-1.5">
                   <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
-                  {uploadError}
+                  <span className="break-words">{uploadError}</span>
                 </span>
               )}
             </div>

@@ -312,10 +312,10 @@ const Profile = () => {
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col xs:flex-row gap-3">
                 <button
                   type="submit"
-                  className="btn-primary"
+                  className="btn-primary w-full xs:w-auto"
                   disabled={loading}
                 >
                   {loading ? 'Updating...' : 'Update Password'}
@@ -382,7 +382,7 @@ const Profile = () => {
                 />
               </div>
 
-              <div className="flex items-center space-x-3 pt-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 pt-2">
                 <button
                   onClick={handleDeleteAccount}
                   className={`px-5 py-2.5 font-semibold rounded-xl text-sm transition-all duration-200 shadow-sm ${
