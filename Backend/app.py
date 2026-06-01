@@ -1162,6 +1162,7 @@ def list_share_links(authenticated_user):
         return {"error": "Failed to retrieve share links."}, 500
 
 @app.route('/share/info/<token>', methods=['GET'])
+@limiter.limit("30 per minute")
 def public_share_info(token):
     try:
         with sqlite3.connect('database.db') as con:
@@ -1207,6 +1208,7 @@ def public_share_info(token):
         return {"error": "Failed to retrieve share info."}, 500
 
 @app.route('/share/<token>', methods=['GET'])
+@limiter.limit("30 per minute")
 def public_share_download(token):
     try:
         with sqlite3.connect('database.db') as con:
