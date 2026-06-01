@@ -4,6 +4,7 @@ import { downloadFile, deleteFile, deleteAllFiles, fetchUserFiles, createShareLi
 import ConfirmModal from '../components/ConfirmModal';
 
 const FileManager = () => {
+  //main place for file actions after upload.
   const { uploadedFiles, loading, shareLinks, shareCreating } = useSelector((state) => state.files);
   const dispatch = useDispatch();
   
@@ -20,6 +21,7 @@ const FileManager = () => {
   const itemsPerPage = 5;
 
   useEffect(() => {
+    // Files and shares are loaded together so delete warnings stay accurate.
     dispatch(fetchUserFiles());
     dispatch(fetchShareLinks());
   }, [dispatch]);
@@ -29,6 +31,7 @@ const FileManager = () => {
   };
 
   const handleDelete = (file) => {
+    // Shared files confirmation message.
     const isShared = shareLinks && shareLinks.some((link) => link.fileId === file.id);
     setConfirmModal({ file, isShared });
   };
@@ -37,6 +40,8 @@ const FileManager = () => {
     if (!confirmModal) return;
     const { file } = confirmModal;
     setConfirmModal(null);
+
+    // Refresh both lists because deleting a file also removes its links.
     const result = await dispatch(deleteFile(file.id));
     if (result.type === 'files/deleteFile/fulfilled') {
       setCurrentPage(1);
@@ -62,6 +67,7 @@ const FileManager = () => {
   };
 
   const openShareModal = (file) => {
+    // Reset the share form each time a new file is picked.
     setShareModalFile(file);
     setShareRecipient('');
     setShareExpiry(24);
@@ -80,6 +86,7 @@ const FileManager = () => {
   };
 
   const handleShareSubmit = async () => {
+    // Share links must go to a valid email address.
     if (!shareRecipient.trim() || !validateEmail(shareRecipient.trim())) {
       setShareError('Please enter a valid recipient email address.');
       return;
@@ -139,6 +146,7 @@ const FileManager = () => {
     });
   };
 
+  // Group by upload date, then paginate the flattened result.
   const fileGroups = [];
   filteredFiles.forEach((file) => {
     const dateStr = getFileDate(file.uploaded_at);
@@ -155,6 +163,7 @@ const FileManager = () => {
   const paginatedFiles = filteredFiles.slice(startIndex, startIndex + itemsPerPage);
   const paginatedIds = new Set(paginatedFiles.map((f) => f.id));
 
+  // Keep date headings while only showing current-page files.
   const paginatedGroups = fileGroups
     .map((g) => ({ ...g, items: g.items.filter((f) => paginatedIds.has(f.id)) }))
     .filter((g) => g.items.length > 0);
@@ -307,7 +316,7 @@ const FileManager = () => {
         )}
       </div>
 
-      {/* Share Link Modal */}
+      {/* Share form for the selected file. */}
       {shareModalFile && (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">

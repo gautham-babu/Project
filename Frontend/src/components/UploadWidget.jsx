@@ -19,6 +19,7 @@ const UploadWidget = () => {
   };
 
   const getFailedFileNames = (warnings) => {
+    // Backend warnings usually arrive as "filename: reason".
     if (!warnings || warnings.length === 0) return [];
     return warnings.map((w) => {
       const colonIdx = w.indexOf(':');
@@ -27,6 +28,7 @@ const UploadWidget = () => {
   };
 
   const getCleanWarningMsg = (warnings) => {
+    // malware warning
     if (!warnings || warnings.length === 0) return '';
     const warningsStr = warnings.join('; ');
     if (warningsStr.toLowerCase().includes('malicious') || warningsStr.toLowerCase().includes('virustotal')) {
@@ -36,6 +38,7 @@ const UploadWidget = () => {
   };
 
   const getCleanErrorMsg = (error) => {
+    // Same for hard failures and partial warnings.
     if (!error) return '';
     if (error.toLowerCase().includes('malicious') || error.toLowerCase().includes('virustotal')) {
       return 'Cannot upload file as it seems to be malicious.';
@@ -48,6 +51,7 @@ const UploadWidget = () => {
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700 truncate pr-3">
           {(() => {
+            // Header text summarizes the whole queue.
             const uploadingItems = uploadQueue.filter((u) => u.status === 'uploading');
             const totalFileCount = uploadingItems.reduce((acc, u) => acc + (u.fileCount || 1), 0);
             if (uploadingItems.length > 0) {

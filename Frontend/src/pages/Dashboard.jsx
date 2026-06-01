@@ -18,6 +18,7 @@ const Dashboard = () => {
   }, [dispatch]);
 
   useEffect(() => {
+    // Stats are separate from profile data, so fetch them after login is known.
     const fetchUserStats = async () => {
       try {
         setStatsLoading(true);
@@ -44,7 +45,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* File Manager Card */}
+        {/* Main file library shortcut. */}
         <Link to="/files" className="card hover:shadow-lg transition-shadow cursor-pointer">
           <div className="flex items-start space-x-4">
             <div className="bg-green-100 p-3 rounded-xl">
@@ -61,7 +62,7 @@ const Dashboard = () => {
           </div>
         </Link>
 
-        {/* Shared Links Card */}
+        {/* Sharing history shortcut. */}
         <Link to="/shares" className="card hover:shadow-lg transition-shadow cursor-pointer">
           <div className="flex items-start space-x-4">
             <div className="bg-blue-100 p-3 rounded-xl">
@@ -78,7 +79,7 @@ const Dashboard = () => {
           </div>
         </Link>
 
-        {/* Info Card */}
+        {/* Quick storage snapshot. */}
         <div className="card bg-gradient-to-br from-primary-50 to-blue-50">
           <div className="flex items-start space-x-4">
             <div className="bg-white p-3 rounded-xl">
@@ -111,7 +112,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">

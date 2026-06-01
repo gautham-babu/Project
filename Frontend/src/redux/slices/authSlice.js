@@ -2,14 +2,13 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import apiClient from '../api/apiClient';
 import { dispatchError, dispatchSuccess } from '../../utils/errorHelpers';
 
-// Async thunks for authentication
+// Auth thunks keep API work out of the UI components.
 export const register = createAsyncThunk(
   'auth/register',
   async (credentials, { dispatch, rejectWithValue }) => {
     try {
       const response = await apiClient.post('/register', credentials);
       
-      // Dispatch success notification
       dispatchSuccess(dispatch, 'Account created successfully! Please log in.');
       
       return response.data;
@@ -44,9 +43,7 @@ export const login = createAsyncThunk(
       localStorage.setItem('token', token);
       localStorage.setItem('email', user.email);
       localStorage.setItem('displayName', `${user.firstName} ${user.lastName}`);
-      
-      dispatchSuccess(dispatch, `Welcome back, ${user.firstName}!`);
-      
+
       return {
         token,
         user: `${user.firstName} ${user.lastName}`,
@@ -83,7 +80,6 @@ export const updatePassword = createAsyncThunk(
         password: newPassword,
       });
       
-      // Dispatch success notification
       dispatchSuccess(dispatch, 'Password updated successfully!');
       
       return response.data;
@@ -103,7 +99,6 @@ export const deleteAccount = createAsyncThunk(
       localStorage.removeItem('email');
       localStorage.removeItem('displayName');
       
-      // Dispatch success notification
       dispatchSuccess(dispatch, 'Account deleted successfully.');
       
       return response.data;
@@ -167,6 +162,7 @@ const authSlice = createSlice({
   },
   reducers: {
     logout: (state) => {
+      // Clear both Redux state and browser storage on logout.
       state.user = null;
       state.email = null;
       state.profile = null;
@@ -179,7 +175,7 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // Register
+      // Register account
       .addCase(register.pending, (state) => {
         state.loading = true;
       })
@@ -189,7 +185,7 @@ const authSlice = createSlice({
       .addCase(register.rejected, (state) => {
         state.loading = false;
       })
-      // Send OTP
+      // Email verification code
       .addCase(sendOtp.pending, (state) => {
         state.otpLoading = true;
       })
@@ -199,7 +195,7 @@ const authSlice = createSlice({
       .addCase(sendOtp.rejected, (state) => {
         state.otpLoading = false;
       })
-      // Login
+      // Login session
       .addCase(login.pending, (state) => {
         state.loading = true;
       })
@@ -215,7 +211,7 @@ const authSlice = createSlice({
         state.loading = false;
         state.isAuthenticated = false;
       })
-      // Get User Info
+      // Current profile
       .addCase(getUserInfo.pending, (state) => {
         state.loading = true;
       })
@@ -233,7 +229,7 @@ const authSlice = createSlice({
       .addCase(getUserInfo.rejected, (state) => {
         state.loading = false;
       })
-      // Update Password
+      // Password update
       .addCase(updatePassword.pending, (state) => {
         state.loading = true;
       })
@@ -243,7 +239,7 @@ const authSlice = createSlice({
       .addCase(updatePassword.rejected, (state) => {
         state.loading = false;
       })
-      // Delete Account
+      // Account deletion
       .addCase(deleteAccount.pending, (state) => {
         state.loading = true;
       })
@@ -258,7 +254,7 @@ const authSlice = createSlice({
       .addCase(deleteAccount.rejected, (state) => {
         state.loading = false;
       })
-      // Forgot Password
+      // Reset link request
       .addCase(forgotPassword.pending, (state) => {
         state.loading = true;
       })
@@ -268,7 +264,7 @@ const authSlice = createSlice({
       .addCase(forgotPassword.rejected, (state) => {
         state.loading = false;
       })
-      // Reset Password
+      // New password save
       .addCase(resetPassword.pending, (state) => {
         state.loading = true;
       })
@@ -278,7 +274,7 @@ const authSlice = createSlice({
       .addCase(resetPassword.rejected, (state) => {
         state.loading = false;
       })
-      // Verify Reset Token
+      // Reset link check
       .addCase(verifyResetToken.pending, (state) => {
         state.loading = true;
       })

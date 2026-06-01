@@ -2,6 +2,7 @@ import { Toaster } from 'react-hot-toast';
 
 const ToastContainer = () => {
   return (
+    // Global toast styling to avoid repeatation
     <Toaster
       position="bottom-right"
       reverseOrder={false}
@@ -9,7 +10,7 @@ const ToastContainer = () => {
       containerClassName=""
       containerStyle={{bottom: 24, right: 24}}
       toastOptions={{
-        // Default
+        // Default toast look.
         duration: 4000,
         style: {
           background: 'white',
@@ -20,7 +21,7 @@ const ToastContainer = () => {
           fontSize: '14px',
           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
         },
-        // Success
+        // Positive actions like upload/delete success.
         success: {
           duration: 4000,
           style: {
@@ -33,7 +34,7 @@ const ToastContainer = () => {
             secondary: '#f0fdf4',
           },
         },
-        // Error 
+        // Errors stay visible a little longer.
         error: {
           duration: 6000,
           style: {
@@ -46,7 +47,7 @@ const ToastContainer = () => {
             secondary: '#fef2f2',
           },
         },
-        // Loading 
+        // Loading toasts are dismissed manually by the caller.
         loading: {
           duration: Infinity,
           style: {

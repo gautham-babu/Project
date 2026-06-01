@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import toast from 'react-hot-toast';
 
-// Error types for better categorization
+// Error groups used by helper utilities and reducers.
 export const ERROR_TYPES = {
   AUTH: 'auth',
   FILE: 'file',
@@ -10,7 +10,7 @@ export const ERROR_TYPES = {
   SERVER: 'server',
 };
 
-// Error severity levels
+// Severity controls how strongly the UI surfaces an error.
 export const ERROR_SEVERITY = {
   LOW: 'low',
   MEDIUM: 'medium',
@@ -26,6 +26,7 @@ const errorSlice = createSlice({
   },
   reducers: {
     addError: (state, action) => {
+      // Keep a full history for debugging recent failures.
       const error = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
@@ -40,7 +41,7 @@ const errorSlice = createSlice({
       state.errors.push(error);
       state.lastError = error;
 
-      // Auto-show toast based on severity
+      // High-impact errors should be visible immediately.
       if (error.severity === ERROR_SEVERITY.CRITICAL || error.severity === ERROR_SEVERITY.HIGH) {
         toast.error(error.message, {
           duration: 6000,
@@ -60,10 +61,12 @@ const errorSlice = createSlice({
     },
 
     removeError: (state, action) => {
+      // Remove one error from the history.
       state.errors = state.errors.filter(error => error.id !== action.payload);
     },
 
     dismissError: (state, action) => {
+      // Keep the record but mark it as handled.
       const error = state.errors.find(error => error.id === action.payload);
       if (error) {
         error.dismissed = true;
@@ -71,11 +74,13 @@ const errorSlice = createSlice({
     },
 
     clearErrors: (state) => {
+      // Used when leaving a flow or resetting UI state.
       state.errors = [];
       state.lastError = null;
     },
 
     clearErrorsByType: (state, action) => {
+      // Useful when one feature clears only its own errors.
       state.errors = state.errors.filter(error => error.type !== action.payload);
     },
   },

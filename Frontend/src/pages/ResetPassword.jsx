@@ -23,6 +23,7 @@ const ResetPassword = () => {
   const { loading } = useSelector((state) => state.auth);
 
   useEffect(() => {
+    // Verify the link once, then keep the token in state.
     const performVerification = async () => {
       if (token) {
         try {
@@ -34,7 +35,7 @@ const ResetPassword = () => {
           setTokenIsValid(false);
         } finally {
           setVerifying(false);
-          // Immediately clean the URL parameter
+          // Hide the token from the address bar after it is checked.
           navigate('/reset-password', { replace: true });
         }
       } else if (!resetToken) {
@@ -62,6 +63,7 @@ const ResetPassword = () => {
     }
 
     if (name === 'password') {
+      // Match the signup password feedback.
       setPasswordStrength(getPasswordStrength(value));
     }
   };
@@ -86,6 +88,7 @@ const ResetPassword = () => {
     e.preventDefault();
 
     if (!resetToken) {
+      // This can happen if someone opens /reset-password directly.
       setServerError('Reset token is missing from the URL. Please request a new link.');
       return;
     }

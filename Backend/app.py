@@ -4,6 +4,7 @@ import random
 import re
 import smtplib
 import sqlite3
+import urllib.error
 import urllib.request
 import uuid
 from datetime import datetime
@@ -11,7 +12,7 @@ from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from functools import wraps
-from time import time
+from time import sleep, time
 from urllib.parse import urlparse
 
 import jwt
@@ -62,7 +63,7 @@ def get_frontend_url():
             
     return (frontend_url or 'http://localhost:5173').rstrip('/')
 
-#Fetching the secret key, Set it in your .env file
+#Fetching the secret key, Set it in your .env file and app limits set
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['UPLOADED_FILES_DEST'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 1*1024*1024*1024 # 1 GB maximum account storage limit
@@ -70,6 +71,7 @@ app.config['MAX_STORAGE_PER_USER'] = 1*1024*1024*1024  # 1 GB limit per user
 
 
 def init_database():
+    # Create local tables on boot
     with sqlite3.connect("database.db") as con:
         con.execute("""
             CREATE TABLE IF NOT EXISTS users(
@@ -135,7 +137,7 @@ init_database()
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["100 per minute", "1000 per hour"],
+    default_limits=["50 per hour", "200 per day"],
     storage_uri="memory://",
 )
 
@@ -219,6 +221,7 @@ def validate_date_of_birth(date_of_birth):
 
 
 def verify_file_content(file_stream, extension):
+    # Check the file header, not only the extension.
     header = file_stream.read(2048)
     file_stream.seek(0)
     
@@ -253,48 +256,97 @@ def verify_file_content(file_stream, extension):
 def scan_file_virustotal(file_stream):
     import hashlib
     
+    # Uploads are blocked unless VirusTotal gives a clean result.
     api_key = os.getenv('VIRUSTOTAL_API_KEY')
     if not api_key:
-        return True, "VirusTotal API key not configured. Scanning skipped."
+        return False, "VirusTotal API key is not configured. Upload blocked."
         
     file_stream.seek(0)
     file_bytes = file_stream.read()
-    file_stream.seek(0) # Reset stream pointer
+    file_stream.seek(0)  # Rewind before Flask saves the file.
     
     sha256_hash = hashlib.sha256(file_bytes).hexdigest()
-    
-    url = f"https://www.virustotal.com/api/v3/files/{sha256_hash}"
-    req = urllib.request.Request(url)
-    req.add_header("x-apikey", api_key)
-    
+
+    def read_json(req, timeout=30):
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode())
+
+    def check_stats(stats):
+        malicious_count = stats.get("malicious", 0)
+        suspicious_count = stats.get("suspicious", 0)
+
+        if malicious_count > 0 or suspicious_count > 1:
+            return False, f"Flagged by VirusTotal ({malicious_count} malicious, {suspicious_count} suspicious)."
+        return True, "File is clean."
+
+    def make_request(url, method="GET", data=None, content_type=None):
+        headers = {"x-apikey": api_key}
+        if content_type:
+            headers["Content-Type"] = content_type
+        return urllib.request.Request(url, data=data, headers=headers, method=method)
+
+    def build_multipart(file_bytes, filename):
+        boundary = f"----AirShare{uuid.uuid4().hex}"
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).encode() + file_bytes + f"\r\n--{boundary}--\r\n".encode()
+        return body, f"multipart/form-data; boundary={boundary}"
+
+    file_lookup_url = f"https://www.virustotal.com/api/v3/files/{sha256_hash}"
     try:
-        with urllib.request.urlopen(req, timeout=5) as response:
-            result = json.loads(response.read().decode())
-            attributes = result.get("data", {}).get("attributes", {})
-            last_analysis_stats = attributes.get("last_analysis_stats", {})
-            malicious_count = last_analysis_stats.get("malicious", 0)
-            suspicious_count = last_analysis_stats.get("suspicious", 0)
-            
-            if malicious_count > 0 or suspicious_count > 1:
-                return False, f"Flagged as malicious by VirusTotal ({malicious_count} engines flagged it)."
-            return True, "File is clean."
+        result = read_json(make_request(file_lookup_url), timeout=15)
+        attributes = result.get("data", {}).get("attributes", {})
+        return check_stats(attributes.get("last_analysis_stats", {}))
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return True, "File not previously seen by VirusTotal."
-        elif e.code in (401, 403):
-            return True, "VirusTotal API key is invalid. Scanning skipped."
-        elif e.code == 429:
-            return True, "VirusTotal API rate limit reached. Scanning skipped."
-        else:
-            return True, f"VirusTotal returned error code {e.code}. Scanning skipped."
+        if e.code != 404:
+            if e.code in (401, 403):
+                return False, "VirusTotal API key is invalid. Upload blocked."
+            if e.code == 429:
+                return False, "VirusTotal rate limit reached. Upload blocked."
+            return False, f"VirusTotal lookup failed with error code {e.code}. Upload blocked."
     except Exception as e:
-        return True, f"VirusTotal connection error: {str(e)}. Scanning skipped."
+        return False, f"VirusTotal lookup failed: {str(e)}. Upload blocked."
+
+    try:
+        # Unknown hashes must be uploaded and analyzed before saving.
+        upload_url = "https://www.virustotal.com/api/v3/files"
+        if len(file_bytes) > 32 * 1024 * 1024:
+            upload_url_result = read_json(make_request("https://www.virustotal.com/api/v3/files/upload_url"), timeout=15)
+            upload_url = upload_url_result.get("data")
+            if not upload_url:
+                return False, "VirusTotal did not provide a large-file upload URL. Upload blocked."
+
+        body, content_type = build_multipart(file_bytes, f"{sha256_hash}.upload")
+        upload_result = read_json(make_request(upload_url, method="POST", data=body, content_type=content_type), timeout=60)
+        analysis_id = upload_result.get("data", {}).get("id")
+        if not analysis_id:
+            return False, "VirusTotal did not return an analysis id. Upload blocked."
+
+        analysis_url = f"https://www.virustotal.com/api/v3/analyses/{analysis_id}"
+        for _ in range(20):
+            analysis_result = read_json(make_request(analysis_url), timeout=15)
+            attributes = analysis_result.get("data", {}).get("attributes", {})
+            if attributes.get("status") == "completed":
+                return check_stats(attributes.get("stats", {}))
+            sleep(3)
+
+        return False, "VirusTotal scan did not finish in time. Upload blocked."
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return False, "VirusTotal API key is invalid. Upload blocked."
+        if e.code == 429:
+            return False, "VirusTotal rate limit reached. Upload blocked."
+        return False, f"VirusTotal scan failed with error code {e.code}. Upload blocked."
+    except Exception as e:
+        return False, f"VirusTotal scan failed: {str(e)}. Upload blocked."
 
 
 
 
 
-#Verify current password (step 1 of password change flow)
+# Step one of the password change flow.
 @app.route('/api/verify-password', methods=['POST'])
 @require_auth_token
 def verify_password(authenticated_user):
@@ -374,7 +426,7 @@ def manage_user(authenticated_user):
         auth_header = request.headers.get('Authorization')
         token_to_delete = auth_header.split(" ")[1] if " " in auth_header else auth_header
 
-        # Delete all files belonging to the user before deleting the account
+        # Remove user files before deleting the account row.
         try:
             upload_dir = app.config['UPLOADED_FILES_DEST']
             with sqlite3.connect("database.db") as con:
@@ -388,14 +440,14 @@ def manage_user(authenticated_user):
                     if os.path.exists(file_path):
                         os.remove(file_path)
                 except OSError:
-                    # Continue deleting other files even if one fails
+                    # Keep going if one file is already missing or locked.
                     pass
         except Exception:
             # Continue with account deletion even if file deletion fails
             pass
 
         with sqlite3.connect("database.db") as con:
-            # Delete user record, user files metadata, and invalidate their current token
+            # Drop metadata and invalidate the current token.
             con.execute("DELETE FROM file_map WHERE owner_email = ?", (authenticated_user,))
             con.execute("DELETE FROM users WHERE email = ?", (authenticated_user,))
             con.execute("INSERT INTO blacklist(token) VALUES(?)", (token_to_delete,))
@@ -412,7 +464,7 @@ def send_otp():
     if email_error:
         return {"error": email_error}, 400
 
-    # Check if user is already registered
+    # Do not send signup codes for existing accounts.
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
         cur.execute("SELECT * FROM users WHERE email=?", (email,))
@@ -422,14 +474,14 @@ def send_otp():
     # Generate 6-digit OTP
     otp = f"{random.randint(100000, 999999)}"
 
-    # Store or update in DB
+    # Re-sending replaces the old code.
     with sqlite3.connect("database.db") as con:
         con.execute(
             "INSERT OR REPLACE INTO signup_otps(email, otp, created_at) VALUES(?, ?, ?)",
             (email, otp, int(time()))
         )
 
-    # Send email
+    # Email credentials come from the backend environment.
     smtp_email = os.getenv('SMTP_EMAIL')
     smtp_password = os.getenv('SMTP_PASSWORD')
     if not smtp_email or not smtp_password:
@@ -437,7 +489,7 @@ def send_otp():
 
     subject = "Verify your email address - AirShare"
 
-    # Attempt to load the logo image
+    # load the logo image
     logo_data = None
     try:
         logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static/airshare-logo.png'))
@@ -491,7 +543,7 @@ def send_otp():
         print(f"SMTP Error sending OTP: {e}")
         return {"error": "Failed to send verification email. Please try again later."}, 500
 
-#Creates a new user
+# Create a user after OTP verification.
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -529,7 +581,7 @@ def register():
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
 
-        # Verify OTP
+        # OTPs expire after ten minutes.
         cur.execute("SELECT otp, created_at FROM signup_otps WHERE email = ?", (email,))
         otp_row = cur.fetchone()
         if not otp_row:
@@ -552,7 +604,7 @@ def register():
             (first_name, last_name, email, hashed_password, date_of_birth, int(time()))
         )
         
-        # Delete OTP record after successful registration
+        # Codes are single-use after successful signup.
         con.execute("DELETE FROM signup_otps WHERE email = ?", (email,))
 
     return {"message" : "User registered successfully."}, 201
@@ -593,10 +645,6 @@ def login():
 @app.route('/api/forgot-password', methods=['POST'])
 @limiter.limit("5 per minute")
 def forgot_password():
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.image import MIMEImage
-
     data = request.get_json() or {}
     email = (data.get('email') or '').strip().lower()
 
@@ -604,7 +652,7 @@ def forgot_password():
     if email_error:
         return {"error": email_error}, 400
 
-    # Generic success message to prevent user enumeration
+    # to send name 
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
         cur.execute("SELECT first_name FROM users WHERE email=?", (email,))
@@ -617,6 +665,7 @@ def forgot_password():
     token = uuid.uuid4().hex
     expires_at = int(time()) + 900 # 15 minutes
 
+    # Store one active reset token per account.
     with sqlite3.connect("database.db") as con:
         con.execute(
             "INSERT OR REPLACE INTO password_resets(email, token, expires_at) VALUES(?, ?, ?)",
@@ -631,6 +680,7 @@ def forgot_password():
 
     subject = "Reset Your Password - AirShare"
     
+    # Reuse the same email as OTP/share emails.
     logo_data = None
     try:
         logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static/airshare-logo.png'))
@@ -654,6 +704,7 @@ def forgot_password():
         logo_html = '<h2 style="color: #3b82f6; margin-top: 0;">AirShare</h2>'
 
     reset_url = f"{frontend_url}/reset-password/{token}"
+    # The token stays in the link; the frontend removes it after verification.
     html_content = f"""
     <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
       {logo_html}
@@ -692,6 +743,7 @@ def forgot_password():
 
 @app.route('/api/verify-reset-token/<token>', methods=['GET'])
 def verify_reset_token(token):
+    # Frontend calls this before showing the new password form.
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
         cur.execute("SELECT email, expires_at FROM password_resets WHERE token=?", (token,))
@@ -710,6 +762,7 @@ def verify_reset_token(token):
 @app.route('/api/reset-password', methods=['POST'])
 @limiter.limit("5 per minute")
 def reset_password():
+    # Token and password are submitted together after link verification.
     data = request.get_json() or {}
     token = data.get('token')
     password = data.get('password')
@@ -734,7 +787,7 @@ def reset_password():
             con.execute("DELETE FROM password_resets WHERE token=?", (token,))
             return {"error": "This reset link has expired. Please request a new password reset link."}, 400
 
-        # Check if the new password is the same as the current password
+        # Avoid resetting to the same password.
         cur.execute("SELECT password FROM users WHERE email=?", (email,))
         user_row = cur.fetchone()
         if user_row and check_password_hash(user_row[0], password):
@@ -742,19 +795,21 @@ def reset_password():
 
         hashed_password = generate_password_hash(password)
         con.execute("UPDATE users SET password=? WHERE email=?", (hashed_password, email))
+        # Reset tokens are single-use.
         con.execute("DELETE FROM password_resets WHERE email=?", (email,))
 
     return {"message": "Password reset successfully. You can now log in with your new password."}, 200
 
-#Rate-limited requests 
+# Shared rate-limit response.
 @app.errorhandler(429)
 def ratelimit_handler(e):
     return {"error" : "Too many requests. Please wait a minute before trying again."}, 429
 
-#Blacklists the old token and issues a fresh one for the user
+# Refresh keeps active sessions alive without a new login.
 @app.route('/refresh', methods=['POST'])
 @require_auth_token
 def refresh_token(authenticated_user):
+    # Replace the current token so stolen old tokens cannot keep working.
     auth_header = request.headers.get('Authorization')
     old_token = auth_header.split(" ")[1] if " " in auth_header else auth_header
     
@@ -763,16 +818,16 @@ def refresh_token(authenticated_user):
     
     new_token = jwt.encode({
         'user': authenticated_user,
-        'exp': int(time()) + 3600 #5 mins validity
+        'exp': int(time()) + 3600
     }, app.config['SECRET_KEY'], algorithm="HS256")
     
     return {"message" : "Token refreshed successfully", "token" : new_token}
 
-#Uploads files and links them to the authenticated user's ID
+# Save uploads with UUID names and keep original names in metadata.
 @app.route('/upload', methods=['POST'])
 @require_auth_token
 def upload_file(authenticated_user):
-    # Handle both single file ("file") and multiple files ("files")
+    # Accept both single-file and multi-file form keys.
     files_to_upload = []
     
     if "files" in request.files:
@@ -783,7 +838,7 @@ def upload_file(authenticated_user):
     if not files_to_upload or (len(files_to_upload) == 1 and files_to_upload[0].filename == ''):
         return {"error" : "No valid files provided"}, 400
     
-    # Calculate user's current storage using mapped file metadata
+    # Storage is counted from file metadata for this owner.
     try:
         with sqlite3.connect("database.db") as con:
             cur = con.cursor()
@@ -795,23 +850,24 @@ def upload_file(authenticated_user):
     # Calculate total size of files to upload
     total_upload_size = 0
     for file in files_to_upload:
+        # Measure from the stream, then rewind before later checks.
         file.stream.seek(0, os.SEEK_END)
         total_upload_size += file.stream.tell()
         file.stream.seek(0)
     
-    # Check if adding these files would exceed the limit
+    # Check the full batch before saving anything.
     if current_storage + total_upload_size > app.config['MAX_STORAGE_PER_USER']:
         max_storage_gb = app.config['MAX_STORAGE_PER_USER'] / (1024 * 1024 * 1024)
         return {"error" : f"Storage limit exceeded. Maximum {max_storage_gb}GB per user."}, 413
     
-    # Save files using UUID-backed storage names
+    # Save each file under a generated name to avoid collisions.
     uploaded_files = []
     errors = []
     upload_dir = app.config['UPLOADED_FILES_DEST']
 
     for file in files_to_upload:
         try:
-            # Check individual file size (must be <= 100MB)
+            # Individual files stay capped at 100MB.
             file.stream.seek(0, os.SEEK_END)
             file_size = file.stream.tell()
             file.stream.seek(0)
@@ -827,7 +883,7 @@ def upload_file(authenticated_user):
                 errors.append(f"{file.filename}: Content does not match extension rules")
                 continue
 
-            # Check file for malware using VirusTotal API
+            # Upload only after VirusTotal returns a clean scan.
             is_safe, scan_msg = scan_file_virustotal(file.stream)
             if not is_safe:
                 errors.append(f"{file.filename}: {scan_msg}")
@@ -839,6 +895,7 @@ def upload_file(authenticated_user):
             file_size = os.path.getsize(saved_path)
             uploaded_at = int(time())
 
+            # Metadata keeps the original name while disk storage stays UUID-based.
             with sqlite3.connect("database.db") as con:
                 con.execute(
                     "INSERT INTO file_map(id, owner_email, original_name, stored_name, size, uploaded_at) VALUES(?, ?, ?, ?, ?, ?)",
@@ -869,7 +926,7 @@ def upload_file(authenticated_user):
     return response, 201
 
 
-#Gives files only to the owners who uploaded them
+# Owner-only download endpoint.
 @app.route('/download/<file_id>', methods=['GET'])
 @require_auth_token
 def download_file(authenticated_user, file_id):
@@ -899,7 +956,7 @@ def download_file(authenticated_user, file_id):
     except Exception:
         return {"error" : "Failed to download file."}, 500
 
-#Delete a file - only by the owner
+# Delete one owned file and its share links.
 @app.route('/delete/<file_id>', methods=['DELETE'])
 @require_auth_token
 def delete_file(authenticated_user, file_id):
@@ -928,7 +985,7 @@ def delete_file(authenticated_user, file_id):
     except Exception:
         return {"error" : "Failed to delete file."}, 500
 
-#Delete ALL files for the authenticated user
+# Delete all files for the current user.
 @app.route('/files/all', methods=['DELETE'])
 @require_auth_token
 def delete_all_files(authenticated_user):
@@ -959,7 +1016,7 @@ def delete_all_files(authenticated_user):
     except Exception:
         return {"error": "Failed to delete all files."}, 500
 
-#List user's uploaded files
+# List files owned by the current user.
 @app.route('/files', methods=['GET'])
 @require_auth_token
 def list_user_files(authenticated_user):
@@ -975,6 +1032,7 @@ def list_user_files(authenticated_user):
         user_files_list = []
         upload_dir = app.config['UPLOADED_FILES_DEST']
         for row in rows:
+            # Mark missing disk files instead of hiding metadata silently.
             stored_name = row[2]
             file_path = os.path.join(upload_dir, stored_name)
             accessible = os.path.exists(file_path)
@@ -991,14 +1049,14 @@ def list_user_files(authenticated_user):
     except Exception:
         return {"error": "Failed to retrieve files"}, 500
 
-# Share creation helpers
+# Email helper for share links.
 def send_share_email(recipient_email, sender_name, share_url, file_name, expires_at):
     smtp_email = os.getenv('SMTP_EMAIL')
     smtp_password = os.getenv('SMTP_PASSWORD')
     if not smtp_email or not smtp_password:
         return False
 
-    # Format the UNIX timestamp to a human-readable date/time string
+    # Show recipients a readable expiry time.
     try:
         expires_datetime = datetime.fromtimestamp(expires_at)
         formatted_expiry = expires_datetime.strftime("%B %d, %Y at %I:%M %p")
@@ -1017,13 +1075,12 @@ def send_share_email(recipient_email, sender_name, share_url, file_name, expires
 
     subject = f"{sender_name} shared a file with you via AirShare"
 
-    # Use 'related' to allow inline images referenced by 'cid:'
+    # Related MIME lets the logo render inline.
     msg = MIMEMultipart('related')
     msg['Subject'] = subject
     msg['From'] = smtp_email
     msg['To'] = recipient_email
 
-    # Alternative container for text and html versions
     msg_alternative = MIMEMultipart('alternative')
     msg.attach(msg_alternative)
 
@@ -1032,7 +1089,6 @@ def send_share_email(recipient_email, sender_name, share_url, file_name, expires
     else:
         logo_html = '<h2 style="color: #3b82f6; margin-top: 0;">AirShare</h2>'
 
-    # Simple, clean HTML email template
     html_content = f"""
     <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
       {logo_html}
@@ -1046,7 +1102,6 @@ def send_share_email(recipient_email, sender_name, share_url, file_name, expires
 
     msg_alternative.attach(MIMEText(html_content, 'html'))
 
-    # Attach logo image
     if logo_data:
         try:
             mime_img = MIMEImage(logo_data)
@@ -1057,9 +1112,8 @@ def send_share_email(recipient_email, sender_name, share_url, file_name, expires
             print(f"Error attaching logo: {e}")
 
     try:
-        # Use context manager (with statement) to automatically close connection safely
         with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()  # Secure the connection
+            server.starttls()
             server.login(smtp_email, smtp_password)
             server.sendmail(smtp_email, [recipient_email], msg.as_string())
         return True
@@ -1070,6 +1124,7 @@ def send_share_email(recipient_email, sender_name, share_url, file_name, expires
 @app.route('/share', methods=['POST'])
 @require_auth_token
 def create_share_link(authenticated_user):
+    # A share link belongs to one file and one recipient email.
     data = request.get_json() or {}
     file_id = data.get('fileId') or data.get('file_id')
     recipient_email = (data.get('recipientEmail') or data.get('recipient_email') or '').strip().lower()
@@ -1106,6 +1161,7 @@ def create_share_link(authenticated_user):
         created_at = int(time())
         expires_at = created_at + expires_in_hours * 3600
 
+        # Persist the token before emailing it.
         con.execute(
             "INSERT INTO share_links(token, file_id, owner_email, recipient_email, created_at, expires_at) VALUES(?, ?, ?, ?, ?, ?)",
             (token, file_id, authenticated_user, recipient_email, created_at, expires_at)
@@ -1132,6 +1188,7 @@ def create_share_link(authenticated_user):
 @app.route('/shares', methods=['GET'])
 @require_auth_token
 def list_share_links(authenticated_user):
+    # Owners see all links they created, newest first.
     try:
         with sqlite3.connect('database.db') as con:
             cur = con.cursor()
@@ -1167,6 +1224,7 @@ def list_share_links(authenticated_user):
 @app.route('/share/info/<token>', methods=['GET'])
 @limiter.limit("30 per minute")
 def public_share_info(token):
+    # Lightweight metadata endpoint used before preview/download.
     try:
         with sqlite3.connect('database.db') as con:
             cur = con.cursor()
@@ -1213,6 +1271,7 @@ def public_share_info(token):
 @app.route('/share/<token>', methods=['GET'])
 @limiter.limit("30 per minute")
 def public_share_download(token):
+    # Public downloads are guarded by token, status, and expiry.
     try:
         with sqlite3.connect('database.db') as con:
             cur = con.cursor()
@@ -1266,6 +1325,7 @@ def public_share_download(token):
 @app.route('/share/<token>', methods=['DELETE'])
 @require_auth_token
 def delete_share_link(authenticated_user, token):
+    # Owners can revoke a share link at any time.
     try:
         with sqlite3.connect("database.db") as con:
             cur = con.cursor()
@@ -1289,7 +1349,7 @@ def delete_share_link(authenticated_user, token):
 def file_too_large(e):
     return {"error" : "File exceeds the 100MB limit. Please upload a smaller file."}, 413
 
-#Get user storage statistics
+# Dashboard storage summary.
 @app.route('/user/stats', methods=['GET'])
 @require_auth_token
 def get_user_stats(authenticated_user):

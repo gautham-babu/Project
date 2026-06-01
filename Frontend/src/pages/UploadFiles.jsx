@@ -5,6 +5,7 @@ import { uploadFile } from '../redux/slices/fileSlice';
 import { validateFile } from '../utils/validators';
 
 const UploadFiles = () => {
+  // Selected files stay local until the user starts the upload.
   const { loading } = useSelector((state) => state.files);
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ const UploadFiles = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    // Warn before leaving while a file is still uploading.
     const handleBeforeUnload = (e) => {
       if (loading) {
         e.preventDefault();
@@ -35,6 +37,7 @@ const UploadFiles = () => {
   };
 
   const processFiles = (files) => {
+    // Validate locally so bad files do not reach the upload endpoint.
     const newFiles = [];
     const errors = [];
 
@@ -68,6 +71,7 @@ const UploadFiles = () => {
   };
 
   const handleDrop = (e) => {
+    // Drag-and-drop uses the same validation path as the file picker.
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
@@ -79,6 +83,7 @@ const UploadFiles = () => {
   };
 
   const handleUpload = async () => {
+    // Redux handles the upload queue and floating progress widget.
     if (selectedFiles.length === 0) return;
 
     setUploadError(null);
@@ -88,17 +93,16 @@ const UploadFiles = () => {
       const responseData = result.payload;
       
       if (responseData && responseData.warnings && responseData.warnings.length > 0) {
-        // Retrieve names of successfully uploaded files
+        // Keep failed files selected so the user can review them.
         const uploadedNames = (responseData.uploaded_files || []).map(f => f.original_name);
-        
-        // Remove successfully uploaded files from selection, keeping the failed ones
+
         setSelectedFiles(prev => prev.filter(file => !uploadedNames.includes(file.name)));
         
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
         
-        // Check for malicious warnings specifically
+        // Make malware warnings simpler
         const warningsStr = responseData.warnings.join('; ');
         if (warningsStr.toLowerCase().includes('malicious') || warningsStr.toLowerCase().includes('virustotal')) {
           const maliciousFileNames = responseData.warnings
@@ -114,7 +118,7 @@ const UploadFiles = () => {
           setUploadError('Some files failed validation: ' + warningsStr);
         }
       } else {
-        // All files uploaded successfully with no warnings
+        // Clean slate after a fully successful upload.
         setSelectedFiles([]);
         if (fileInputRef.current) {
           fileInputRef.current.value = '';

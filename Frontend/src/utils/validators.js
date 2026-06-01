@@ -1,4 +1,4 @@
-// Password validation function matching backend requirements
+// Keep this in step with the backend password rules.
 export const validatePassword = (password) => {
   const errors = [];
   
@@ -70,7 +70,7 @@ export const validateDateOfBirth = (dateOfBirth) => {
   return errors;
 };
 
-// File validation
+// Match the backend upload allow-list before the user sends anything.
 export const validateFile = (file) => {
   const errors = [];
   const allowedTypes = ['pdf', 'png', 'jpg', 'jpeg', 'txt', 'docx', 'mp4', 'mov', 'mkv'];
@@ -93,7 +93,7 @@ export const validateFile = (file) => {
   return errors;
 };
 
-// Password strength indicator
+// Small hint for the password strength UI.
 export const getPasswordStrength = (password) => {
   const errors = validatePassword(password);
   

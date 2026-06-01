@@ -27,6 +27,7 @@ const Profile = () => {
   const [verifyError, setVerifyError] = useState(null);
 
   useEffect(() => {
+    // Refresh profile details when the settings page opens.
     dispatch(getUserInfo());
   }, [dispatch]);
 
@@ -40,6 +41,7 @@ const Profile = () => {
   };
 
   const formatAccountAge = (createdAt) => {
+    // better display of timestamps
     if (!createdAt) return 'Just created';
 
     const createdDate = new Date(createdAt * 1000);
@@ -86,6 +88,7 @@ const Profile = () => {
   };
 
   const handleVerifyCurrentPassword = async () => {
+    // Verify first so the password form only appears after a real match.
     if (!passwordData.currentPassword) {
       setVerifyError('Please enter your current password.');
       return;
@@ -107,6 +110,7 @@ const Profile = () => {
   };
 
   const validatePasswordForm = () => {
+    // New password rules are the same as registration.
     const errors = {};
 
     if (!passwordData.currentPassword) {
@@ -149,6 +153,7 @@ const Profile = () => {
   };
 
   const handleDeleteAccount = async () => {
+    // After account deletion there is no authenticated state left.
     const result = await dispatch(deleteAccount());
     if (result.type === 'auth/deleteAccount/fulfilled') {
       navigate('/login');
@@ -163,7 +168,7 @@ const Profile = () => {
       </div>
 
       <div className="space-y-6">
-        {/* User Info Card */}
+        {/* Basic account details. */}
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Account Information</h2>
           <div className="space-y-4">
@@ -194,11 +199,11 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Change Password Card */}
+        {/* Password changes use a two-step check. */}
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Change Password</h2>
 
-          {/* Step 1: Verify current password */}
+          {/* Step 1: verify current password. */}
           <div className="space-y-3">
             <div>
               <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
@@ -239,7 +244,7 @@ const Profile = () => {
             )}
           </div>
 
-          {/* Step 2: Set new password — shown only after verification */}
+          {/* Step 2: save the new password. */}
           {currentPasswordVerified && (
             <form onSubmit={handlePasswordSubmit} className="space-y-4 mt-6 animate-fadeIn">
               <div>

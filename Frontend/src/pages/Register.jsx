@@ -12,6 +12,7 @@ import {
 import Datepicker from "react-tailwindcss-datepicker";
 
 const Register = () => {
+  // Signup is a two-part process: email OTP first, account creation second.
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -32,6 +33,7 @@ const Register = () => {
   const { loading, otpLoading } = useSelector((state) => state.auth);
 
   useEffect(() => {
+    // Basic resend timer for the email code.
     let interval = null;
     if (countdown > 0) {
       interval = setInterval(() => {
@@ -44,6 +46,7 @@ const Register = () => {
   }, [countdown]);
 
   const handleSendOtp = async () => {
+    // The backend only needs the normalized email for OTP.
     const emailErrors = validateEmail(formData.email);
     if (emailErrors.length > 0) {
       setValidationErrors({
@@ -70,7 +73,7 @@ const Register = () => {
       [name]: value,
     });
 
-    // Clear validation error for this field and server error on input change
+    // Clear stale messages as soon as the user fixes a field.
     if (validationErrors[name] || serverError) {
       setValidationErrors({
         ...validationErrors,
@@ -79,13 +82,14 @@ const Register = () => {
       setServerError(null);
     }
 
-    // Update password strength
+    // Give instant password feedback.
     if (name === 'password') {
       setPasswordStrength(getPasswordStrength(value));
     }
   };
 
   const validateForm = () => {
+    // Build one error object so all field messages update together.
     const errors = {};
 
     const firstNameErrors = validateName(formData.firstName, 'First name');
@@ -103,7 +107,7 @@ const Register = () => {
       errors.email = emailErrors[0];
     }
 
-    // OTP validation
+    // Email must be verified before registration.
     if (!otpSent) {
       errors.email = 'Please verify your email address first';
     } else if (!formData.otp || formData.otp.trim().length !== 6) {
@@ -115,7 +119,7 @@ const Register = () => {
       errors.password = passwordErrors.join('. ');
     }
 
-    // Validate confirm password
+    // Keep the two password fields in sync.
     if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = 'Passwords do not match';
     }
@@ -363,22 +367,18 @@ const Register = () => {
                     let finalDate = "";
                     
                     if (newValue && newValue.startDate) {
-                      // Take whatever format the calendar gives us and turn it into a real Date object
+                      // Normalize the picker value for the backend.
                       const selectedDate = new Date(newValue.startDate);
                       
-                      // Pull out the year, month, and day separately
                       const year = selectedDate.getFullYear();
-                      // Add a leading zero if the month or day is a single digit (e.g., '05')
                       const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
                       const day = String(selectedDate.getDate()).padStart(2, '0');
                       
-                      // Stitch them together exactly how your backend wants it
                       finalDate = `${year}-${month}-${day}`;
                     }
 
                     setFormData({ ...formData, dateOfBirth: finalDate });
                     
-                    // Clear errors
                     if (validationErrors.dateOfBirth || serverError) {
                       setValidationErrors({ ...validationErrors, dateOfBirth: null });
                       setServerError(null);

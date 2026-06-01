@@ -5,17 +5,17 @@ import { dispatchError, dispatchSuccess } from '../utils/errorHelpers';
 export const useNotifications = () => {
   const dispatch = useDispatch();
 
-  // Show success notification
+  // Store success messages and show a small toast.
   const notifySuccess = (message, duration = 3000) => {
     dispatchSuccess(dispatch, message, 'general', duration);
     return toast.success(message, { duration });
   };
 
-  // Show error notification with enhanced error handling
+  // Push errors into Redux first, then show them to the user.
   const notifyError = (error, context = '', options = {}) => {
     dispatchError(dispatch, error, context);
     
-    // Create custom toast with retry button if applicable
+    // for retry button actions
     if (options.onRetry) {
       toast.error((t) => (
         <div className="flex flex-col space-y-2">
@@ -39,7 +39,7 @@ export const useNotifications = () => {
     }
   };
 
-  // Show warning notification
+  // show warnings notification
   const notifyWarning = (message, duration = 4000) => {
     toast(() => (
       <div className="flex items-center space-x-2">
@@ -60,7 +60,7 @@ export const useNotifications = () => {
     });
   };
 
-  // Show info notification
+  // Info toasts for neutral status updates.
   const notifyInfo = (message, duration = 4000) => {
     toast(() => (
       <div className="flex items-center space-x-2">
@@ -81,7 +81,7 @@ export const useNotifications = () => {
     });
   };
 
-  // Show loading notification
+  // Loading toasts return an id so callers can dismiss them later.
   const notifyLoading = (message) => {
     return toast.loading(message, {
       style: {
@@ -92,12 +92,12 @@ export const useNotifications = () => {
     });
   };
 
-  // Dismiss specific notification
+  // Close one toast by id.
   const dismissNotification = (toastId) => {
     toast.dismiss(toastId);
   };
 
-  // Dismiss all notifications
+  // Clear every toast on screen.
   const dismissAll = () => {
     toast.dismiss();
   };
@@ -113,7 +113,7 @@ export const useNotifications = () => {
   };
 };
 
-// Hook for handling API errors consistently
+// Small wrapper for components that only need API error handling.
 export const useApiErrorHandler = () => {
   const { notifyError } = useNotifications();
 

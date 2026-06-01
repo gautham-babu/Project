@@ -1,34 +1,34 @@
 import { addError, ERROR_TYPES, ERROR_SEVERITY } from '../redux/slices/errorSlice';
 import { addSuccess } from '../redux/slices/successSlice';
 
-// Error message mappings for better user experience
+// Known backend/client error codes mapped to plain text.
 const ERROR_MESSAGES = {
-  // Network errors
+  // Browser or server connection problems.
   'ERR_NETWORK': 'Unable to connect to server. Please check your internet connection.',
   'ERR_CONNECTION_REFUSED': 'Server is temporarily unavailable. Please try again later.',
   'ERR_TIMEOUT': 'Request timed out. Please try again.',
 
-  // Authentication errors
+  // Login/session problems.
   'INVALID_CREDENTIALS': 'Invalid email address or password. Please check your credentials.',
   'TOKEN_EXPIRED': 'Your session has expired. Please log in again.',
   'UNAUTHORIZED': 'You are not authorized to perform this action.',
 
-  // File errors
+  // Upload and file handling problems.
   'FILE_TOO_LARGE': 'File size exceeds the maximum limit of 100MB.',
   'INVALID_FILE_TYPE': 'This file type is not supported. Please upload a valid file.',
   'UPLOAD_FAILED': 'File upload failed. Please try again.',
 
-  // Validation errors
+  // Form and input problems.
   'VALIDATION_FAILED': 'Please check your input and try again.',
   'REQUIRED_FIELD': 'This field is required.',
   'INVALID_FORMAT': 'Please enter a valid format.',
 
-  // Server errors
+  // Backend availability problems.
   'INTERNAL_SERVER_ERROR': 'Something went wrong on our end. Please try again later.',
   'SERVICE_UNAVAILABLE': 'Service is temporarily unavailable. Please try again later.',
 };
 
-// Get user-friendly error message
+// Convert Axios/backend errors into text the UI can show safely.
 export const getUserFriendlyErrorMessage = (error) => {
   if (typeof error === 'string') {
     return ERROR_MESSAGES[error] || error;
@@ -39,6 +39,7 @@ export const getUserFriendlyErrorMessage = (error) => {
   }
 
   if (error?.response?.status) {
+    // Prefer backend messages when they are specific enough.
     switch (error.response.status) {
       case 400:
         return error.response.data?.error || 'Invalid request. Please check your input.';
@@ -68,7 +69,7 @@ export const getUserFriendlyErrorMessage = (error) => {
   return error.message || 'An unexpected error occurred.';
 };
 
-// Determine error type based on error details
+// Categorize the error for reducers and future UI filtering.
 export const getErrorType = (error) => {
   if (error?.response?.status) {
     if (error.response.status === 401 || error.response.status === 403) {
@@ -93,7 +94,7 @@ export const getErrorType = (error) => {
   return ERROR_TYPES.SERVER;
 };
 
-// Determine error severity
+// Severity helps decide how visible the error should be.
 export const getErrorSeverity = (error) => {
   if (error?.response?.status) {
     if (error.response.status >= 500) {
@@ -114,7 +115,7 @@ export const getErrorSeverity = (error) => {
   return ERROR_SEVERITY.MEDIUM;
 };
 
-// Dispatch error helper function
+// Store a normalized error event in Redux.
 export const dispatchError = (dispatch, error, source = 'Unknown') => {
   const friendlyMessage = getUserFriendlyErrorMessage(error);
   const errorType = getErrorType(error);
@@ -133,7 +134,7 @@ export const dispatchError = (dispatch, error, source = 'Unknown') => {
   }));
 };
 
-// Dispatch success helper function
+// Store a normalized success event in Redux.
 export const dispatchSuccess = (dispatch, message, type = 'general', duration = 3000) => {
   dispatch(addSuccess({
     message,
@@ -142,7 +143,7 @@ export const dispatchSuccess = (dispatch, message, type = 'general', duration = 
   }));
 };
 
-// Retry helper for failed operations
+// Retry short-lived failures with a simple backoff.
 export const createRetryHandler = (dispatch, operation, maxRetries = 3) => {
   return async (...args) => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -154,7 +155,7 @@ export const createRetryHandler = (dispatch, operation, maxRetries = 3) => {
           throw error;
         }
 
-        // Wait before retrying (exponential backoff)
+        // Wait a bit longer after each failed attempt.
         await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
       }
     }

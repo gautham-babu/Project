@@ -10,10 +10,12 @@ const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
+    // Logout clears local auth state
     dispatch(logout());
     navigate('/login');
   };
 
+  // list
   const navLinks = [
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/files', label: 'Your Files' },

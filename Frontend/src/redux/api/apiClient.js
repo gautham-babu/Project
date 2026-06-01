@@ -2,6 +2,7 @@ import axios from 'axios';
 
 export const API_BASE_URL = typeof window !== 'undefined' && window.location.hostname ? `http://${window.location.hostname}:5000` : 'http://127.0.0.1:5000';
 
+// Keep one Axios instance so auth headers and retries stay consistent.
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -9,7 +10,7 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor to add token to requests
+// Attach the saved token to every API call.
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -23,18 +24,16 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle token expiration
+// Refresh an expired token once, then send the user back to login.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // If error is 401 and we haven't retried yet
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
-        // Try to refresh the token
         const token = localStorage.getItem('token');
         if (token) {
           const response = await axios.post(
@@ -50,12 +49,10 @@ apiClient.interceptors.response.use(
           const newToken = response.data.token;
           localStorage.setItem('token', newToken);
 
-          // Retry the original request with new token
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return apiClient(originalRequest);
         }
       } catch (refreshError) {
-        // Token refresh failed, clear auth data
         localStorage.removeItem('token');
         localStorage.removeItem('email');
         localStorage.removeItem('displayName');

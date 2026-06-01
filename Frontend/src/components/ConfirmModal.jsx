@@ -2,16 +2,14 @@ import { useEffect } from 'react';
 
 /**
  * ConfirmModal – a centered in-app confirmation dialog.
- *
- * Props:
- *  - isOpen      {boolean}   – whether the modal is visible
- *  - title       {string}    – modal heading
- *  - message     {string}    – body text
- *  - confirmText {string}    – label for confirm button (default "Confirm")
- *  - cancelText  {string}    – label for cancel button  (default "Cancel")
- *  - danger      {boolean}   – if true, confirm button is red (destructive action)
- *  - onConfirm   {function}  – called when user clicks confirm
- *  - onCancel    {function}  – called when user clicks cancel or backdrop
+ *  - isOpen      – whether the modal is visible
+ *  - title       – modal heading
+ *  - message     – body text
+ *  - confirmText – label = "Confirm"
+ *  - cancelText  – label = "Cancel"
+ *  - danger      – if true, confirm button is red
+ *  - onConfirm   – called when user clicks confirm
+ *  - onCancel    – called when user clicks cancel
  */
 const ConfirmModal = ({
   isOpen,
@@ -34,18 +32,18 @@ const ConfirmModal = ({
   if (!isOpen) return null;
 
   return (
-    /* Backdrop */
+    /* Clicking the backdrop cancels the action. */
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}
       onClick={onCancel}
     >
-      {/* Dialog */}
+      {/* Stop clicks inside the dialog from closing it. */}
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fadeIn"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Icon */}
+        {/* Red icon */}
         <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${danger ? 'bg-red-100' : 'bg-yellow-100'}`}>
           {danger ? (
             <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,13 +58,13 @@ const ConfirmModal = ({
           )}
         </div>
 
-        {/* Text */}
+        {/* Main Text */}
         <h3 className="text-center text-lg font-semibold text-gray-900 mb-2">{title}</h3>
         {message && (
           <p className="text-center text-sm text-gray-600 mb-6">{message}</p>
         )}
 
-        {/* Actions */}
+        {/* Actions, Cancel is placed first*/}
         <div className="flex gap-3 justify-center">
           <button
             type="button"

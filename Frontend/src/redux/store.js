@@ -3,6 +3,7 @@ import authReducer from './slices/authSlice';
 import fileReducer from './slices/fileSlice';
 import notificationReducer from './slices/notificationSlice';
 
+// Central Redux store for auth, files, and notification state.
 export const store = configureStore({
   reducer: {
     auth: authReducer,
@@ -12,11 +13,9 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        // Ignore these action types
+        // Keep Redux Toolkit quiet for known non-serializable metadata.
         ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
-        // Ignore these field paths in all actions
         ignoredActionsPaths: ['meta.arg', 'payload.timestamp'],
-        // Ignore these paths in the state
         ignoredPaths: ['items.dates'],
       },
     }),

@@ -1,5 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+// Lightweight notification history for places that do not need toast directly.
 const notificationSlice = createSlice({
   name: 'notifications',
   initialState: {
@@ -7,6 +8,7 @@ const notificationSlice = createSlice({
   },
   reducers: {
     addNotification: (state, action) => {
+      // Add timing data here so callers only pass the message details.
       const notification = {
         id: Date.now() + Math.random(),
         timestamp: Date.now(),
@@ -15,11 +17,13 @@ const notificationSlice = createSlice({
       state.notifications.push(notification);
     },
     removeNotification: (state, action) => {
+      // Drop one notification by its generated id.
       state.notifications = state.notifications.filter(
         (notification) => notification.id !== action.payload
       );
     },
     clearAllNotifications: (state) => {
+      // Clear the panel/history when needed.
       state.notifications = [];
     },
   },
@@ -27,7 +31,7 @@ const notificationSlice = createSlice({
 
 export const { addNotification, removeNotification, clearAllNotifications } = notificationSlice.actions;
 
-// Notification types
+// Small enum so notification types stay consistent.
 export const NOTIFICATION_TYPES = {
   SUCCESS: 'success',
   ERROR: 'error',
@@ -35,7 +39,7 @@ export const NOTIFICATION_TYPES = {
   INFO: 'info',
 };
 
-// Helper functions for different notification types
+// Factory helpers keep notification objects predictable.
 export const createSuccessNotification = (message, options = {}) => ({
   type: NOTIFICATION_TYPES.SUCCESS,
   message,
@@ -45,6 +49,7 @@ export const createSuccessNotification = (message, options = {}) => ({
 });
 
 export const createErrorNotification = (message, options = {}) => ({
+  // Errors can opt into a retry action.
   type: NOTIFICATION_TYPES.ERROR,
   message,
   title: options.title || 'Error',

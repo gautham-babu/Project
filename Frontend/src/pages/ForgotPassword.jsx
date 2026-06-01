@@ -20,6 +20,7 @@ const ForgotPassword = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validate before asking the backend to send mail.
     const emailErrors = validateEmail(email);
     if (emailErrors.length > 0) {
       setError(emailErrors[0]);
@@ -30,6 +31,7 @@ const ForgotPassword = () => {
     setSuccessMsg(null);
 
     try {
+      // Backend keeps the response generic for privacy.
       const result = await dispatch(forgotPassword(email.trim().toLowerCase())).unwrap();
       setSuccessMsg(result.message || 'If this email is registered, a password reset link has been sent.');
     } catch (err) {

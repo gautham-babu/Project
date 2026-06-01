@@ -19,6 +19,7 @@ function App() {
   return (
     <Provider store={store}>
       <Router>
+        {/*App routes*/}
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/login" replace />} />
@@ -71,8 +72,7 @@ function App() {
           <Route path="share/:token" element={<SharePreview />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-        
-        {/*Toast Notifications*/}
+        {/* One global place for in-app messages. */}
         <ToastContainer />
       </Router>
     </Provider>

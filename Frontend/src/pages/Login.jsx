@@ -17,6 +17,7 @@ const Login = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
+      // go to the dashboard if success.
       navigate('/dashboard');
     }
   }, [isAuthenticated, navigate]);
@@ -31,7 +32,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Client-side validation
+    // Catch simple form issues before calling the API.
     if (!formData.email.trim()) {
       notifyError('Email address is required', 'Validation Error');
       return;

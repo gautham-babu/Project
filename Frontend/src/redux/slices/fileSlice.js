@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import apiClient from '../api/apiClient';
 import { dispatchError, dispatchSuccess } from '../../utils/errorHelpers';
 
+// File thunks cover upload, download, delete, and share-link work.
 export const fetchUserFiles = createAsyncThunk(
   'files/fetchUserFiles',
   async (_, { dispatch, rejectWithValue }) => {
@@ -22,6 +23,7 @@ export const downloadFile = createAsyncThunk(
       const response = await apiClient.get(`/download/${id}`, {
         responseType: 'blob',
       });
+      // Browser download needs a temporary object URL.
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -129,6 +131,7 @@ const fileSlice = createSlice({
   },
   reducers: {
     startUpload: (state, action) => {
+      // Queue items drive the floating upload widget.
       state.uploadQueue.push(action.payload);
     },
     updateUploadProgress: (state, action) => {
@@ -138,6 +141,7 @@ const fileSlice = createSlice({
       }
     },
     finishUpload: (state, action) => {
+      // Keep the final state visible until the user dismisses it.
       const upload = state.uploadQueue.find(u => u.id === action.payload.id);
       if (upload) {
         upload.status = action.payload.status;
@@ -159,7 +163,7 @@ const fileSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // Upload File
+      // Upload request
       .addCase(uploadFile.pending, (state) => {
         state.loading = true;
       })
@@ -169,7 +173,7 @@ const fileSlice = createSlice({
       .addCase(uploadFile.rejected, (state) => {
         state.loading = false;
       })
-      // Fetch User Files
+      // File list
       .addCase(fetchUserFiles.pending, (state) => {
         state.loading = true;
       })
@@ -180,7 +184,7 @@ const fileSlice = createSlice({
       .addCase(fetchUserFiles.rejected, (state) => {
         state.loading = false;
       })
-      // Download File
+      // Download state
       .addCase(downloadFile.pending, (state) => {
         state.loading = true;
       })
@@ -190,7 +194,7 @@ const fileSlice = createSlice({
       .addCase(downloadFile.rejected, (state) => {
         state.loading = false;
       })
-      // Delete File
+      // Single delete
       .addCase(deleteFile.pending, (state) => {
         state.loading = true;
       })
@@ -200,7 +204,7 @@ const fileSlice = createSlice({
       .addCase(deleteFile.rejected, (state) => {
         state.loading = false;
       })
-      // Create Share Link
+      // Share create
       .addCase(createShareLink.pending, (state) => {
         state.shareCreating = true;
       })
@@ -211,7 +215,7 @@ const fileSlice = createSlice({
       .addCase(createShareLink.rejected, (state) => {
         state.shareCreating = false;
       })
-      // Fetch Share Links
+      // Share list
       .addCase(fetchShareLinks.pending, (state) => {
         state.shareLoading = true;
       })
@@ -222,7 +226,7 @@ const fileSlice = createSlice({
       .addCase(fetchShareLinks.rejected, (state) => {
         state.shareLoading = false;
       })
-      // Delete Share Link
+      // Share delete
       .addCase(deleteShareLink.pending, (state) => {
         state.shareLoading = true;
       })
@@ -233,7 +237,7 @@ const fileSlice = createSlice({
       .addCase(deleteShareLink.rejected, (state) => {
         state.shareLoading = false;
       })
-      // Delete All Files
+      // Bulk delete
       .addCase(deleteAllFiles.pending, (state) => {
         state.loading = true;
       })
@@ -263,6 +267,7 @@ export const uploadFile = createAsyncThunk(
     const fileArray = Array.isArray(files) ? files : [files];
     const uploadId = isObject && payload.uploadId ? payload.uploadId : (Date.now().toString() + Math.random().toString(36).substr(2, 9));
     try {
+      // Build one multipart request for the selected files.
       const formData = new FormData();
       const fileNames = fileArray.map(f => f.name).join(', ');
       const totalSize = fileArray.reduce((acc, f) => acc + f.size, 0);

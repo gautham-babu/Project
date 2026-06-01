@@ -4,6 +4,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../redux/api/apiClient';
 
 const SharePreview = () => {
+  // Public recipients land here from emailed share links.
   const { token } = useParams();
   const [fileInfo, setFileInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -12,6 +13,7 @@ const SharePreview = () => {
   const [loadingText, setLoadingText] = useState(false);
 
   useEffect(() => {
+    // Public share pages do not use auth, just the share token.
     const fetchShareInfo = async () => {
       try {
         setLoading(true);
@@ -20,6 +22,7 @@ const SharePreview = () => {
         setFileInfo(data);
         
         if (data.extension === 'txt') {
+          // Text files get a small inline preview.
           try {
             setLoadingText(true);
             const textRes = await axios.get(`${API_BASE_URL}/share/${token}`);
@@ -80,12 +83,12 @@ const SharePreview = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-between pt-2 pb-10 px-4 sm:px-6">
-      {/* Brand Logo Header */}
+      {/* Simple brand header for public recipients. */}
       <div className="flex justify-center mb-2">
         <img src="/airshare-logo.png" alt="AirShare" className="h-16 sm:h-20 w-auto object-contain" />
       </div>
 
-      {/* Main Content Area */}
+      {/* Preview and download area. */}
       <div className="flex-1 flex items-center justify-center max-w-2xl w-full mx-auto">
         {loading ? (
           <div className="text-gray-500 font-medium animate-pulse">Loading preview...</div>
@@ -102,19 +105,19 @@ const SharePreview = () => {
               </p>
             </div>
 
-            {/* Preview Box */}
+            {/* File preview when the browser can render it. */}
             <div className="border border-gray-100 bg-gray-50/50 rounded-xl p-2 flex justify-center">
               {renderPreview()}
             </div>
 
-            {/* Expiry Warning */}
+            {/* Keep expiry visible before download. */}
             {fileInfo.expiresAt && (
               <p className="text-xs text-red-500 font-medium">
                 This link expires on {formatExpiry(fileInfo.expiresAt)}
               </p>
             )}
 
-            {/* Download Button */}
+            {/* Force download instead of preview. */}
             <div className="pt-2 flex justify-center">
               <button
                 onClick={handleDownload}
@@ -127,7 +130,7 @@ const SharePreview = () => {
         )}
       </div>
 
-      {/* Footer */}
+      {/* footer. */}
       <div className="text-center mt-6 text-xs text-gray-400 font-medium">
         &copy; 2026 AirShare
       </div>

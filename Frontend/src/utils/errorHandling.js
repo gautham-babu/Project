@@ -1,6 +1,6 @@
-// Enhanced error handling utilities
+// Shared helpers for turning raw API errors into UI-friendly objects.
 
-// Error types for better categorization
+// Broad buckets used by retry and message logic.
 export const ERROR_TYPES = {
   NETWORK: 'network',
   VALIDATION: 'validation',
@@ -11,7 +11,7 @@ export const ERROR_TYPES = {
   UNKNOWN: 'unknown',
 };
 
-// Map HTTP status codes to error types
+// Map HTTP status codes to the buckets above.
 export const getErrorType = (status) => {
   if (!status) return ERROR_TYPES.NETWORK;
   
@@ -28,27 +28,27 @@ export const getErrorType = (status) => {
   return ERROR_TYPES.UNKNOWN;
 };
 
-// Enhanced error message mapping
+// Pick the clearest message available from the error object.
 export const getErrorMessage = (error, context = '') => {
-  // If error is already a string, return it
+  // String errors are already display-ready.
   if (typeof error === 'string') return error;
   
-  // Handle Axios error structure
+  // Backend responses usually put readable text here.
   if (error?.response?.data?.error) {
     return error.response.data.error;
   }
   
-  // Handle network errors
+  // No response normally means the API was unreachable.
   if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Network Error')) {
     return 'Network connection failed. Please check your internet connection and try again.';
   }
   
-  // Handle timeout errors
+  // Timeouts are retriable but should explain the wait.
   if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
     return 'Request timed out. The server might be busy, please try again.';
   }
   
-  // Handle specific HTTP status codes
+  // Fall back to status-specific copy when the backend is quiet.
   const status = error?.response?.status;
   switch (status) {
     case 400:
@@ -75,12 +75,12 @@ export const getErrorMessage = (error, context = '') => {
       break;
   }
   
-  // Default fallback with context
+  // Last fallback keeps some context for debugging.
   const baseMessage = error?.message || 'An unexpected error occurred';
   return context ? `${context}: ${baseMessage}` : baseMessage;
 };
 
-// Create user-friendly error object
+// Package the message with retry metadata for components.
 export const createEnhancedError = (error, context = '', actionType = '') => {
   const errorType = getErrorType(error?.response?.status);
   const message = getErrorMessage(error, context);
@@ -99,14 +99,14 @@ export const createEnhancedError = (error, context = '', actionType = '') => {
   };
 };
 
-// Determine if an error should allow retry
+// Only retry problems that might succeed on a second attempt.
 export const shouldAllowRetry = (error, errorType) => {
-  // Don't retry validation, authentication, or authorization errors
+  // User/input/session errors need a real fix, not a retry.
   if ([ERROR_TYPES.VALIDATION, ERROR_TYPES.AUTHENTICATION, ERROR_TYPES.AUTHORIZATION].includes(errorType)) {
     return false;
   }
   
-  // Allow retry for network, server errors, and specific client errors
+  // Network, rate-limit, and server issues can be temporary.
   const status = error?.response?.status;
   if (status === 429 || status >= 500) return true; // Rate limit or server error
   if (errorType === ERROR_TYPES.NETWORK) return true; // Network issues
@@ -114,7 +114,7 @@ export const shouldAllowRetry = (error, errorType) => {
   return false;
 };
 
-// Get appropriate retry delay based on error type
+// Give the server a little time before retrying.
 export const getRetryDelay = (errorType, status) => {
   switch (errorType) {
     case ERROR_TYPES.NETWORK:
@@ -125,13 +125,13 @@ export const getRetryDelay = (errorType, status) => {
       break;
   }
   
-  // Special handling for rate limiting
+  // Rate limits need a longer pause.
   if (status === 429) return 60000; // 1 minute for rate limit
   
   return 3000; // Default 3 seconds
 };
 
-// Validation helper for form errors
+// Normalize field errors into the same shape as API errors.
 export const createValidationErrors = (errors) => {
   if (Array.isArray(errors)) {
     return errors.map(error => ({

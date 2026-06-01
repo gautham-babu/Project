@@ -4,6 +4,7 @@ import { fetchShareLinks, deleteShareLink } from '../redux/slices/fileSlice';
 import ConfirmModal from '../components/ConfirmModal';
 
 const SharedLinks = () => {
+  // This page manages links already created from the file manager.
   const { shareLinks, shareLoading } = useSelector((state) => state.files);
   const dispatch = useDispatch();
 
@@ -11,6 +12,7 @@ const SharedLinks = () => {
   const [copiedToken, setCopiedToken] = useState(null);
 
   useEffect(() => {
+    // Always show the latest links when this page opens.
     dispatch(fetchShareLinks());
   }, [dispatch]);
 
@@ -27,6 +29,7 @@ const SharedLinks = () => {
 
   const copyToClipboard = async (text, token) => {
     try {
+      // Give quick feedback
       await navigator.clipboard.writeText(text);
       setCopiedToken(token);
       setTimeout(() => setCopiedToken(null), 2000);
@@ -46,6 +49,7 @@ const SharedLinks = () => {
     });
   };
 
+  // Group by creation date
   const shareGroups = [];
   sortedShares.forEach((share) => {
     const dateStr = getShareDate(share.createdAt);
