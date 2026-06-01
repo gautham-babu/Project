@@ -65,6 +65,25 @@ export const validateDateOfBirth = (dateOfBirth) => {
   
   if (!dateOfBirth) {
     errors.push('Date of birth is required');
+    return errors;
+  }
+
+  const birthDate = new Date(dateOfBirth);
+  if (isNaN(birthDate.getTime())) {
+    errors.push('Invalid date format');
+    return errors;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+
+  if (age < 13) {
+    errors.push('You must be at least 13 years of age to register');
   }
   
   return errors;
